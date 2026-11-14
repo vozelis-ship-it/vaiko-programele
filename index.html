@@ -133,8 +133,8 @@ h2{margin:0 0 10px;font-size:22px}
 @keyframes beat{50%{transform:scale(1.12)}}
 
 /* šuniukas */
-.petbox{position:relative;height:250px;border-radius:18px;background:linear-gradient(#e0f2fe 0 50%,#bbf7d0 50%);overflow:hidden;touch-action:none;box-shadow:inset 0 -6px 0 #86efac}
-.pet{position:absolute;left:0;top:0;width:140px;height:112px;touch-action:none;cursor:grab}
+.petbox{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
+.pet{position:absolute;left:0;top:0;width:140px;height:112px;touch-action:none;cursor:grab;pointer-events:auto;filter:drop-shadow(0 0 2px #fff) drop-shadow(0 4px 6px #0003)}
 .pet-act{width:100%;height:100%;transform-origin:50% 90%;transition:transform .25s}
 .pet-face{width:100%;height:100%}
 .pet-face.flip{transform:scaleX(-1)}
@@ -188,7 +188,7 @@ h2{margin:0 0 10px;font-size:22px}
    Duomenys saugomi planšetėje (localStorage) ir, jei įvestas šeimos kodas, sinchronizuojami su Firebase Firestore (be paskyrų, pagal slaptą kodą).
    ========================================================= */
 
-const VERSION = '1.4 (2026-11-14)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
+const VERSION = '1.6 (2026-11-14)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
 const app = document.getElementById('app');
 const KEY = 'vp_v1';
 const DEFAULTS = {
@@ -210,7 +210,7 @@ const DEFAULTS = {
     sound: true,                    // garsai ir konfeti
     autoRead: true,                 // klausimus perskaityti automatiškai
     petOn: true,                    // rodyti šuniuką pradžios ekrane
-    petName: 'Pūkis',
+    petName: 'Bobis',
     pin: '1234',
     perRound: 5,                    // minutės už sėkmingą raundą
     minCorrect: 7,                  // kiek teisingų iš 10 reikia
@@ -235,6 +235,7 @@ function load() {
   return JSON.parse(JSON.stringify(DEFAULTS));
 }
 let st = load();
+if (st.settings.petName === 'Pūkis') st.settings.petName = 'Bobis';   // senas numatytasis vardas
 
 /* ---------- sinchronizacija su Firebase (Firestore REST, be SDK) ---------- */
 const FB = { apiKey: 'AIzaSyCtQc4Rz7ETpxka5gNSqPMR2WTmmHtcQy8', projectId: 'lukrecijos-programele' };
@@ -725,38 +726,52 @@ function showCheer() {
 }
 
 /* ---------- šuniukas pudelis ---------- */
-const FUR = 'fill="#fde2c8" stroke="#e7b98e" stroke-width="2"';
-const PET_SVG = `<svg viewBox="0 0 130 100" aria-hidden="true">
-  <g class="tail"><path d="M30 52 Q22 46 20 36" stroke="#e7b98e" stroke-width="4" fill="none"/><circle cx="19" cy="31" r="9" ${FUR}/></g>
-  <g class="leg leg-b"><rect x="37" y="62" width="8" height="24" rx="4" fill="#efc39b"/><circle cx="41" cy="88" r="7" ${FUR}/></g>
-  <g class="leg leg-a"><rect x="77" y="62" width="8" height="24" rx="4" fill="#efc39b"/><circle cx="81" cy="88" r="7" ${FUR}/></g>
-  <ellipse cx="58" cy="58" rx="30" ry="14" ${FUR}/>
-  <circle cx="38" cy="56" r="13" ${FUR}/>
-  <circle cx="80" cy="54" r="17" ${FUR}/>
-  <g class="leg leg-a"><rect x="45" y="62" width="8" height="24" rx="4" fill="#f6d2b0"/><circle cx="49" cy="88" r="7" ${FUR}/></g>
-  <g class="leg leg-b"><rect x="86" y="62" width="8" height="24" rx="4" fill="#f6d2b0"/><circle cx="90" cy="88" r="7" ${FUR}/></g>
-  <rect x="88" y="40" width="8" height="15" rx="3" fill="#ef4444" transform="rotate(-20 92 47)"/><circle cx="91" cy="56" r="3" fill="#facc15"/>
+// Bobis — gauruotas juodas pudelis (piešiamas iš garbanų, be paveikslėlių failų)
+const PET_SVG = (() => {
+  let seed = 7; const rr = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;   // pastovus „atsitiktinumas“
+  const C = '#1b1b1f', DARK = '#121215', CURL = '#34343b', TIP = '#5e5550';
+  const curls = (cx, cy, rx, ry, n, tipShare = 0.07) => { let s = '';
+    for (let i = 0; i < n; i++) { const a = rr() * 6.283, d = Math.sqrt(rr()) * 0.85;
+      s += `<circle cx="${(cx + rx * d * Math.cos(a)).toFixed(1)}" cy="${(cy + ry * d * Math.sin(a)).toFixed(1)}" r="${(1.2 + rr() * 1.1).toFixed(1)}" fill="none" stroke="${rr() < tipShare ? TIP : CURL}" stroke-width="1"/>`; }
+    return s; };
+  const blob = (cx, cy, rx, ry, curl = 3.2, fill = C, tex = 1) => {
+    const n = Math.max(8, Math.round(Math.PI * (rx + ry) / (curl * 1.25)));
+    let s = `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${fill}"/>`;
+    for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rr() * 0.2, k = curl * (0.85 + rr() * 0.35);
+      s += `<circle cx="${(cx + rx * Math.cos(a)).toFixed(1)}" cy="${(cy + ry * Math.sin(a)).toFixed(1)}" r="${k.toFixed(1)}" fill="${fill}"/>`; }
+    return s + curls(cx, cy, rx, ry, Math.round(rx * ry / 14 * tex));
+  };
+  const leg = (cls, x, fill) => { let s = `<g class="leg ${cls}"><rect x="${x - 5}" y="58" width="10" height="32" rx="5" fill="${fill}"/>`;
+    for (let y = 60; y <= 88; y += 3.5) s += `<circle cx="${x - 5 + rr()}" cy="${y}" r="3" fill="${fill}"/><circle cx="${x + 5 - rr()}" cy="${y + 1.5}" r="3" fill="${fill}"/>`;
+    return s + blob(x + 1, 91, 7.5, 4.5, 2.6, fill, 0.6) + curls(x, 74, 4, 13, 6, 0.15) + '</g>'; };
+  return `<svg viewBox="0 0 130 100" aria-hidden="true">
+  <g class="tail"><path d="M36 46 Q30 40 28 32" stroke="${C}" stroke-width="7" fill="none" stroke-linecap="round"/>${blob(26, 23, 8, 10, 3)}</g>
+  ${leg('leg-b', 40, DARK)}${leg('leg-a', 80, DARK)}
+  ${blob(60, 50, 30, 15, 3.4)}${blob(40, 47, 12, 13, 3.2)}${blob(83, 50, 14, 17, 3.4)}
+  ${leg('leg-a', 49, C)}${leg('leg-b', 90, C)}
   <g class="head">
-    <circle cx="100" cy="34" r="15" ${FUR}/>
-    <circle cx="96" cy="18" r="11" ${FUR}/><circle cx="107" cy="20" r="8" ${FUR}/>
-    <path d="M101 9 l-9 -6 v12 z M101 9 l9 -6 v12 z" fill="#ec4899"/><circle cx="101" cy="9" r="2.5" fill="#be185d"/>
-    <ellipse cx="90" cy="43" rx="8" ry="13" fill="#f6c9a0" stroke="#e7b98e" stroke-width="2"/>
-    <ellipse cx="114" cy="40" rx="10" ry="7" ${FUR}/>
-    <circle cx="123" cy="37" r="3.5" fill="#1f2937"/>
-    <g class="eye"><circle cx="106" cy="31" r="3" fill="#1f2937"/><circle cx="107" cy="30" r="1" fill="#fff"/></g>
-    <path class="eyec" d="M103 32 q3 2.5 6 0" stroke="#1f2937" stroke-width="2" fill="none"/>
-    <circle cx="104" cy="40" r="3" fill="#fca5a5" opacity=".7"/>
-    <ellipse class="tongue" cx="117" cy="49" rx="3.5" ry="5" fill="#f472b6"/>
-    <path d="M111 45 q4 3 9 0" stroke="#92400e" stroke-width="1.5" fill="none"/>
+    ${blob(93, 36, 9, 12, 3)}
+    ${blob(101, 22, 13, 13, 3.2)}${blob(98, 11, 12, 7, 3)}
+    ${blob(115, 30, 11, 6, 2.2, C, 0.5)}
+    <circle cx="119" cy="34" r="1.6" fill="${TIP}"/><circle cx="122" cy="35.5" r="1.5" fill="${TIP}"/><circle cx="116" cy="35.5" r="1.4" fill="${TIP}"/><circle cx="124" cy="33" r="1.3" fill="${TIP}"/>
+    <ellipse cx="126" cy="29" rx="3.6" ry="3" fill="#000"/><circle cx="125" cy="28" r="0.9" fill="#777"/>
+    ${blob(102, 15, 5, 2.2, 2)}
+    ${blob(90, 33, 6.5, 14, 2.8, '#16161a')}
+    <g class="eye"><circle cx="106.5" cy="23.5" r="4.2" fill="#fff"/><circle cx="107.8" cy="23.8" r="2.6" fill="#000"/><circle cx="108.7" cy="22.8" r="0.9" fill="#fff"/></g>
+    <path class="eyec" d="M102.5 24 q3.5 2.5 7 0" stroke="#e5e7eb" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    <ellipse class="tongue" cx="117" cy="40" rx="3.2" ry="4.5" fill="#f472b6"/>
+    <path d="M110 36 q4 2.5 9 0" stroke="#55555c" stroke-width="1.3" fill="none" stroke-linecap="round"/>
   </g></svg>`;
+})();
 const pet = { x: 0.4, y: 0.6, tx: 0.4, ty: 0.6, dir: 1, act: '', actUntil: 0, nextWander: 0, moving: false,
   ball: null, carry: false, sleeping: false, drag: null, celebrate: false, taps: 0, last: -1, rec: false, nextZ: 0 };
-const petName = () => st.settings.petName || 'Pūkis';
+const petName = () => st.settings.petName || 'Bobis';
+const PET_TOP = 60;                         // viršuje paliekama vietos kalbos burbului
 const clamp01 = v => Math.min(1, Math.max(0, v));
 function petHtml() {
   if (st.settings.petOn === false) return '';
   return `<div class="card" style="padding:12px 12px 14px">
-    <div class="row spread" style="margin-bottom:8px"><b style="font-size:20px">🐩 ${esc(petName())}</b><span class="muted">Paspausk šuniuką arba patempk pirštu!</span></div>
+    <div class="row spread" style="margin-bottom:8px"><b style="font-size:20px">🐩 ${esc(petName())}</b><span class="muted">Jis laksto po visą ekraną — paspausk jį arba patempk pirštu!</span></div>
     <div class="petbox" id="petbox"><div class="pet" id="pet"><div class="pet-act" id="petAct"><div class="pet-face" id="petFace">${PET_SVG}</div></div></div></div>
     <div class="petbar">
       <button class="btn small" data-act="pfeed">🦴 Pamaitink</button>
@@ -845,18 +860,18 @@ function petLoop(now) {
   requestAnimationFrame(petLoop);
   const box = document.getElementById('petbox'), el = document.getElementById('pet');
   if (!box || !el) return;
-  const W = box.clientWidth - 140, Hh = box.clientHeight - 112;
+  const W = box.clientWidth - 140, Hh = box.clientHeight - 112 - PET_TOP;
   if (W <= 0 || Hh <= 0) return;
   const busy = now < pet.actUntil;
   if (pet.celebrate) { pet.celebrate = false; petDo('salto', 1000); petSnd('bark'); petFx('🎉', 5); petBubble('Šaunu! Valio!'); }
   pet.moving = false;
   if (!pet.drag && !pet.sleeping && !busy) {
     if (pet.ball && !pet.carry) { pet.tx = pet.ball.x; pet.ty = pet.ball.y; }
-    const dx = (pet.tx - pet.x) * W, dy = (pet.ty - pet.y) * Hh, dist = Math.hypot(dx, dy), sp = pet.ball ? 5 : 3;
+    const dx = (pet.tx - pet.x) * W, dy = (pet.ty - pet.y) * Hh, dist = Math.hypot(dx, dy), sp = pet.ball ? 7 : 4;
     if (dist > sp) {
       pet.x += dx / dist * sp / W; pet.y += dy / dist * sp / Hh; pet.moving = true;
       if (Math.abs(dx) > 1) pet.dir = dx > 0 ? 1 : -1;
-    } else if (pet.ball && !pet.carry) { pet.carry = true; pet.tx = 0.45; pet.ty = 0.8; petBubble('Pagavau!'); }
+    } else if (pet.ball && !pet.carry) { pet.carry = true; pet.tx = 0.45; pet.ty = 0.5; petBubble('Pagavau!'); }
     else if (pet.ball) { pet.ball = null; pet.carry = false; petDo('wag', 1500); petFx('💖', 4); petSnd('bark'); petBubble('Dar kartą!'); }
     else if (now > pet.nextWander) {
       pet.nextWander = now + 2000 + Math.random() * 4000;
@@ -864,14 +879,14 @@ function petLoop(now) {
     }
   }
   if (pet.sleeping && now > pet.nextZ) { pet.nextZ = now + 1300; petFx('💤', 1); }
-  el.style.transform = `translate(${(pet.x * W).toFixed(1)}px, ${(pet.y * Hh).toFixed(1)}px)`;
+  el.style.transform = `translate(${(pet.x * W).toFixed(1)}px, ${(PET_TOP + pet.y * Hh).toFixed(1)}px)`;
   const cls = 'pet-act' + (pet.drag && pet.drag.moved ? ' held' : pet.sleeping ? ' sleep' : busy ? ' ' + pet.act : '') + (pet.moving ? ' run' : '');
   const a = document.getElementById('petAct'); if (a && a.className !== cls) a.className = cls;
   const f = document.getElementById('petFace'), fc = 'pet-face' + (pet.dir < 0 ? ' flip' : ''); if (f && f.className !== fc) f.className = fc;
   let b = document.getElementById('ball');
   if (pet.ball) {
     if (!b) { b = document.createElement('div'); b.id = 'ball'; b.className = 'ball'; b.textContent = '🎾'; box.appendChild(b); }
-    const bx = pet.carry ? pet.x * W + (pet.dir > 0 ? 112 : -10) : pet.ball.x * W + 52, by = pet.carry ? pet.y * Hh + 42 : pet.ball.y * Hh + 70;
+    const bx = pet.carry ? pet.x * W + (pet.dir > 0 ? 112 : -10) : pet.ball.x * W + 52, by = PET_TOP + (pet.carry ? pet.y * Hh + 42 : pet.ball.y * Hh + 70);
     b.style.transform = `translate(${bx.toFixed(1)}px, ${by.toFixed(1)}px)`;
   } else if (b) b.remove();
 }
@@ -1307,14 +1322,14 @@ app.addEventListener('pointerdown', e => {
   const r = box.getBoundingClientRect();
   if (e.target.closest('#pet')) { pet.drag = { sx: e.clientX, sy: e.clientY, moved: false, r }; e.preventDefault(); return; }
   pet.sleeping = false;
-  pet.tx = clamp01((e.clientX - r.left - 70) / (r.width - 140)); pet.ty = clamp01((e.clientY - r.top - 56) / (r.height - 112));
+  pet.tx = clamp01((e.clientX - r.left - 70) / (r.width - 140)); pet.ty = clamp01((e.clientY - r.top - 56 - PET_TOP) / (r.height - 112 - PET_TOP));
 });
 window.addEventListener('pointermove', e => {
   const d = pet.drag; if (!d) return;
   if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > 8) { d.moved = true; pet.sleeping = false; pet.actUntil = 0; }
   if (d.moved) {
     pet.x = pet.tx = clamp01((e.clientX - d.r.left - 70) / (d.r.width - 140));
-    pet.y = pet.ty = clamp01((e.clientY - d.r.top - 56) / (d.r.height - 112));
+    pet.y = pet.ty = clamp01((e.clientY - d.r.top - 56 - PET_TOP) / (d.r.height - 112 - PET_TOP));
   }
 });
 const petUp = () => {

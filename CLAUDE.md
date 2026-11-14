@@ -11,6 +11,7 @@ Savininkas: Valdas (ne programuotojas). Atsakyk lietuviškai, paprastai, trumpai
 - `tests/` — `test.html`, `test2.html` (atidaryti per `python3 -m http.server`, žr. `#out`), `synctest.py` (Playwright, netikras Firestore).
 
 ## Svarbiausios taisyklės
+- Po kiekvieno pakeitimo padidink `VERSION` (index.html viršuje) — Valdas pagal ją planšetėje mato, ar atsinaujino.
 - Neperrašinėk veikiančios logikos be reikalo; keisk minimaliai.
 - Būsena: localStorage raktas `vp_v1`; šeimos kodas atskirai `vp_family`.
 - Sinchronizacija: Firestore REST (be SDK), dokumentas `families/{kodas}`, laukas `data` (JSON tekstas). Tėvų dalis (videos+settings, `pts`) ir vaiko dalis (stars, balance, earned, log, `cts`) sulyginamos atskirai pagal laiko žymą (naujesnis laimi).

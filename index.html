@@ -120,6 +120,7 @@ h2{margin:0 0 10px;font-size:22px}
    Duomenys saugomi planšetėje (localStorage) ir, jei įvestas šeimos kodas, sinchronizuojami su Firebase Firestore (be paskyrų, pagal slaptą kodą).
    ========================================================= */
 
+const VERSION = '1.2 (2026-11-14)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
 const app = document.getElementById('app');
 const KEY = 'vp_v1';
 const DEFAULTS = {
@@ -519,7 +520,8 @@ function vHome() {
       <button class="btn green small" data-act="extdone">✅ Atlikau EDUKA / Oxford užduotį</button>
       <span class="muted">Tėvai patvirtina ir gauni +${st.settings.edukaMin} min.</span>
     </div>
-  </div>`;
+  </div>
+  <p class="muted center" style="font-size:13px;opacity:.7">Versija ${VERSION}</p>`;
 }
 
 /* ---------- užduotis ---------- */
@@ -791,7 +793,8 @@ function vParent() {
     <label>Naujas PIN (4 skaitmenys)</label><input type="text" inputmode="numeric" maxlength="4" data-set="pin" value="${esc(s.pin)}">
     <p class="hint">Dabar PIN: ${s.pin === '1234' ? '<b>1234 (pakeisk!)</b>' : 'pakeistas'}.</p>
     <p>Lietuviškas balsas planšetėje: <b>${hasVoice('lt') ? 'yra' : 'nerastas'}</b> · anglų: <b>${hasVoice('en') ? 'yra' : 'nerastas'}</b></p>
-    <p class="hint">Jei lietuviško balso nėra: Nustatymai → Kalba → Teksto vertimas į kalbą (Text-to-speech) → atsisiųsk lietuvių kalbą.</p></div>`;
+    <p class="hint">Jei lietuviško balso nėra: Nustatymai → Kalba → Teksto vertimas į kalbą (Text-to-speech) → atsisiųsk lietuvių kalbą.</p></div>
+  <p class="muted center">Programos versija: <b>${VERSION}</b></p>`;
 }
 
 /* ---------- įvykiai ---------- */

@@ -109,6 +109,28 @@ input[type=text],input[type=number],input[type=url],input[type=password]{
 label{display:block;font-weight:700;margin:12px 0 4px}
 h2{margin:0 0 10px;font-size:22px}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#111827;color:#fff;padding:14px 22px;border-radius:14px;font-size:18px;font-weight:700;z-index:50;max-width:90vw;text-align:center}
+
+/* linksmybės */
+.confetti{position:fixed;top:-40px;z-index:60;pointer-events:none;font-size:26px;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
+.pill.fire{color:#ea580c}
+.coin{display:inline-flex;align-items:center;justify-content:center;width:62px;height:62px;border-radius:50%;font-size:20px;font-weight:900;margin:4px;vertical-align:middle;border:5px solid #d4a017;background:#e5e7eb;color:#374151}
+.coin.c2{border-color:#cbd5e1;background:#facc15;width:70px;height:70px}
+.note{display:inline-flex;align-items:center;justify-content:center;width:110px;height:58px;border-radius:8px;font-size:22px;font-weight:900;margin:4px;vertical-align:middle;background:#a8a29e;color:#fff;border:3px solid #78716c}
+.opt.emo{font-size:52px;padding:10px 8px}
+.opt:disabled{opacity:.3}
+.slots{font-size:46px;font-weight:900;letter-spacing:6px;display:block;margin-top:6px}
+.badges{display:flex;flex-wrap:wrap;gap:10px}
+.badge{display:flex;flex-direction:column;align-items:center;width:92px;text-align:center;font-size:12px;font-weight:700;color:var(--muted)}
+.badge span{font-size:40px;line-height:1.2}
+.badge.off span{filter:grayscale(1);opacity:.25}
+.badge.on{color:var(--ink)}
+.lvl{font-size:13px;font-weight:800;color:var(--brand);background:#eef2ff;border-radius:99px;padding:2px 10px}
+.overlay{position:fixed;inset:0;background:#1e1b4bcc;z-index:55;display:flex;align-items:center;justify-content:center;padding:20px}
+.overlay .card{max-width:520px;width:100%;text-align:center;animation:pop .4s}
+@keyframes pop{from{transform:scale(.6);opacity:0}}
+.big-heart{font-size:110px;animation:beat 1s infinite}
+@keyframes beat{50%{transform:scale(1.12)}}
 </style>
 </head>
 <body>
@@ -120,7 +142,7 @@ h2{margin:0 0 10px;font-size:22px}
    Duomenys saugomi planšetėje (localStorage) ir, jei įvestas šeimos kodas, sinchronizuojami su Firebase Firestore (be paskyrų, pagal slaptą kodą).
    ========================================================= */
 
-const VERSION = '1.2 (2026-11-14)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
+const VERSION = '1.3 (2026-11-14)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
 const app = document.getElementById('app');
 const KEY = 'vp_v1';
 const DEFAULTS = {
@@ -131,7 +153,16 @@ const DEFAULTS = {
   earned: { date: '', sec: 0 },     // šiandien užsidirbta sekundžių
   log: [],                          // {d, s, t, ok}
   videos: [],                       // {kind:'video'|'playlist', id, title}
+  rounds: 0,                        // užbaigtų raundų skaičius
+  levels: { math: 1, lt: 1, en: 1 },// sunkumo lygis 1–3
+  streak: { last: '', n: 0 },       // kiek dienų iš eilės
+  badges: {},                       // {id: data}
+  cheer: { id: 0, text: '' },       // tėvų dalis: paskutinis pagyrimas
+  cheerSeen: 0,                     // tik šiame įrenginyje: kurį pagyrimą jau parodėme
   settings: {
+    name: '',                       // vaiko vardas (kreipinys)
+    sound: true,                    // garsai ir konfeti
+    autoRead: true,                 // klausimus perskaityti automatiškai
     pin: '1234',
     perRound: 5,                    // minutės už sėkmingą raundą
     minCorrect: 7,                  // kiek teisingų iš 10 reikia
@@ -148,7 +179,8 @@ function load() {
     if (s && typeof s === 'object') {
       return Object.assign({}, JSON.parse(JSON.stringify(DEFAULTS)), s, {
         settings: Object.assign({}, DEFAULTS.settings, s.settings || {}),
-        earned: Object.assign({}, DEFAULTS.earned, s.earned || {})
+        earned: Object.assign({}, DEFAULTS.earned, s.earned || {}),
+        levels: Object.assign({}, DEFAULTS.levels, s.levels || {})
       });
     }
   } catch (e) {}
@@ -161,8 +193,12 @@ const FB = { apiKey: 'AIzaSyCtQc4Rz7ETpxka5gNSqPMR2WTmmHtcQy8', projectId: 'lukr
 const FAM_KEY = 'vp_family';
 let famCode = '';
 try { famCode = localStorage.getItem(FAM_KEY) || ''; } catch (e) {}
-const partP = o => JSON.stringify({ videos: o.videos, settings: o.settings, bonusTotal: o.bonusTotal });          // tėvų duomenys
-const partC = o => JSON.stringify({ stars: o.stars, balance: o.balance, earned: o.earned, log: o.log, bonusApplied: o.bonusApplied }); // vaiko duomenys
+const P_F = ['videos', 'settings', 'bonusTotal', 'cheer'];                                              // tėvų duomenys
+const C_F = ['stars', 'balance', 'earned', 'log', 'bonusApplied', 'rounds', 'levels', 'streak', 'badges']; // vaiko duomenys
+const pickF = (o, F) => { const r = {}; F.forEach(f => r[f] = o[f]); return r; };
+const partP = o => JSON.stringify(pickF(o, P_F));
+const partC = o => JSON.stringify(pickF(o, C_F));
+const clone = (v, d) => JSON.parse(JSON.stringify(v === undefined ? d : v));
 let lastP = partP(st), lastC = partC(st), syncTimer = null, syncBusy = false, syncMsg = '', joining = false;
 // Tėvų papildomas laikas keliauja kaip skirtumas (bonusTotal − bonusApplied), todėl nedingsta,
 // net jei vaiko duomenis kitame įrenginyje perrašo naujesni. Laiko žymos (cts) nekeičia.
@@ -200,14 +236,15 @@ async function sync() {
     else if (r.status !== 404) throw new Error('HTTP ' + r.status);
     let pulled = false, push = false;
     const playing = view === 'ytplay';
-    const takeP = () => { st.videos = remote.videos || []; st.settings = Object.assign({}, DEFAULTS.settings, remote.settings || {});
-      st.bonusTotal = remote.bonusTotal || 0; st.pts = remote.pts || 0; pulled = true; };
-    const takeC = () => { st.stars = remote.stars || 0; st.balance = remote.balance || 0;
-      st.earned = Object.assign({}, DEFAULTS.earned, remote.earned || {}); st.log = remote.log || [];
-      st.bonusApplied = remote.bonusApplied || 0; st.cts = remote.cts || 0; pulled = true; };
+    const takeP = () => { P_F.forEach(f => st[f] = clone(remote[f], DEFAULTS[f]));
+      st.settings = Object.assign({}, DEFAULTS.settings, st.settings || {}); st.pts = remote.pts || 0; pulled = true; };
+    const takeC = () => { C_F.forEach(f => st[f] = clone(remote[f], DEFAULTS[f]));
+      st.earned = Object.assign({}, DEFAULTS.earned, st.earned || {}); st.levels = Object.assign({}, DEFAULTS.levels, st.levels || {});
+      st.cts = remote.cts || 0; pulled = true; };
     if (remote && joining) {
       // Prisijungiant prie esamo kodo laimi tas įrenginys, kuriame yra tikri duomenys (ne laiko žyma).
-      if ((remote.videos || []).length || !st.videos.length) takeP(); else { st.pts = Date.now(); lastP = partP(st); push = true; }
+      if ((remote.videos || []).length || !st.videos.length) { takeP(); st.cheerSeen = (st.cheer || {}).id || 0; }
+      else { st.pts = Date.now(); lastP = partP(st); push = true; }
       const act = o => (o.log || []).length + (o.stars || 0);
       if (act(remote) >= act(st)) takeC(); else { st.cts = Date.now(); lastC = partC(st); push = true; }
     } else if (remote) {
@@ -221,11 +258,11 @@ async function sync() {
     if (pulled) {
       lastP = partP(st); lastC = partC(st);
       try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {}
-      if (view === 'home' || view === 'yt') render();
+      if (view === 'home' || view === 'yt') render(); else showCheer();
     }
     if (push) {
       const body = { fields: {
-        data: { stringValue: JSON.stringify({ videos: st.videos, settings: st.settings, bonusTotal: st.bonusTotal || 0, stars: st.stars, balance: st.balance, earned: st.earned, log: st.log, bonusApplied: st.bonusApplied || 0, pts: st.pts || 0, cts: st.cts || 0 }) },
+        data: { stringValue: JSON.stringify(Object.assign(pickF(st, P_F), pickF(st, C_F), { pts: st.pts || 0, cts: st.cts || 0 })) },
         ts: { integerValue: String(Date.now()) } } };
       const w = await fetch(docUrl() + '&updateMask.fieldPaths=data&updateMask.fieldPaths=ts', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -260,6 +297,39 @@ function toast(msg) {
   document.body.appendChild(t); setTimeout(() => t.remove(), 3200);
 }
 
+/* ---------- garsai ir konfeti (be failų, per Web Audio) ---------- */
+let actx = null;
+function tone(seq) {             // seq: [[dažnis Hz, trukmė s], ...]
+  if (!st.settings.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    let t = actx.currentTime;
+    for (const [f, d] of seq) {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + d + 0.05); t += d * 0.85;
+    }
+  } catch (e) {}
+}
+const SND = {
+  ok: () => tone([[784, 0.12], [1175, 0.25]]),
+  bad: () => tone([[300, 0.18], [220, 0.3]]),
+  tap: () => tone([[660, 0.08]]),
+  win: () => tone([[523, 0.15], [659, 0.15], [784, 0.15], [1047, 0.45]])
+};
+function confetti(n) {
+  if (!st.settings.sound) return;
+  const E = ['🎉', '⭐', '🎈', '✨', '🌟', '💖', '🟣', '🟡', '🟢'];
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('div'); c.className = 'confetti'; c.textContent = pick(E);
+    c.style.left = Math.random() * 100 + 'vw'; const d = 1.6 + Math.random() * 1.6;
+    c.style.animationDuration = d + 's'; c.style.animationDelay = Math.random() * 0.4 + 's';
+    document.body.appendChild(c); setTimeout(() => c.remove(), (d + 0.5) * 1000);
+  }
+}
+
 /* ---------- balsas ---------- */
 function voices() { try { return speechSynthesis.getVoices() || []; } catch (e) { return []; } }
 function hasVoice(lang) { return voices().some(v => v.lang && v.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())); }
@@ -292,21 +362,38 @@ function numWrongs(ans, lo, hi) {
 const NAMES = ['Ona', 'Jonas', 'Rokas', 'Gabija', 'Mantas', 'Rugilė', 'Lukas', 'Emilija'];
 const EMO = ['🍎', '⭐', '🐟', '🎈', '🚗', '🌼', '🍪', '⚽'];
 
+const MX = [10, 20, 100];                 // skaičių riba pagal lygį
+function clockSvg(h, m) {
+  const ha = ((h % 12) + m / 60) * 30, ma = m * 6;
+  const num = [...Array(12)].map((_, i) => { const n = i + 1, a = n * Math.PI / 6;
+    return `<text x="${(60 + 45 * Math.sin(a)).toFixed(1)}" y="${(65 - 45 * Math.cos(a)).toFixed(1)}" font-size="14" font-weight="800" text-anchor="middle" fill="#1e1b4b">${n}</text>`; }).join('');
+  return `<svg viewBox="0 0 120 120" width="200" height="200"><circle cx="60" cy="60" r="57" fill="#fff" stroke="#4f46e5" stroke-width="5"/>${num}` +
+    `<line x1="60" y1="60" x2="60" y2="32" stroke="#1e1b4b" stroke-width="6" stroke-linecap="round" transform="rotate(${ha} 60 60)"/>` +
+    `<line x1="60" y1="60" x2="60" y2="18" stroke="#dc2626" stroke-width="3.5" stroke-linecap="round" transform="rotate(${ma} 60 60)"/>` +
+    `<circle cx="60" cy="60" r="4" fill="#1e1b4b"/></svg>`;
+}
+const SHAPES = [
+  ['Apskritimas', c => `<circle cx="60" cy="60" r="48" fill="${c}"/>`],
+  ['Kvadratas', c => `<rect x="15" y="15" width="90" height="90" fill="${c}"/>`],
+  ['Trikampis', c => `<polygon points="60,10 112,105 8,105" fill="${c}"/>`],
+  ['Stačiakampis', c => `<rect x="4" y="30" width="112" height="60" fill="${c}"/>`]
+];
+
 const MATH = {
-  add() {
-    const a = rnd(1, 12), b = rnd(1, Math.min(12, 20 - a)), r = a + b;
-    const c = choices(r, numWrongs(r, 0, 20));
+  add(l = 2) {
+    const M = MX[l - 1], a = rnd(1, M - 1), b = rnd(1, M - a), r = a + b;
+    const c = choices(r, numWrongs(r, 0, M));
     return { type: 'add', prompt: 'Kiek bus?', vis: `${a} + ${b} = ?`, visClass: 'eq', ...c, val: r,
       say: { t: `${a} plius ${b}. Kiek bus?`, l: 'lt-LT' } };
   },
-  sub() {
-    const a = rnd(2, 20), b = rnd(1, a), r = a - b;
-    const c = choices(r, numWrongs(r, 0, 20));
+  sub(l = 2) {
+    const M = MX[l - 1], a = rnd(2, M), b = rnd(1, a), r = a - b;
+    const c = choices(r, numWrongs(r, 0, M));
     return { type: 'sub', prompt: 'Kiek bus?', vis: `${a} − ${b} = ?`, visClass: 'eq', ...c, val: r,
       say: { t: `${a} atimti ${b}. Kiek bus?`, l: 'lt-LT' } };
   },
-  cmp() {
-    const a = rnd(0, 20); let b = rnd(0, 20); if (Math.random() < 0.15) b = a;
+  cmp(l = 2) {
+    const M = MX[l - 1], a = rnd(0, M); let b = rnd(0, M); if (Math.random() < 0.15) b = a;
     const sym = a > b ? '>' : a < b ? '<' : '=';
     const opts = ['<', '=', '>'];
     return { type: 'cmp', prompt: 'Palygink skaičius', vis: `${a} ◻ ${b}`, visClass: 'eq', opts, ans: opts.indexOf(sym), val: sym,
@@ -318,33 +405,57 @@ const MATH = {
     return { type: 'count', prompt: 'Kiek yra?', vis: `<span class="emo">${e.repeat(n)}</span>`, ...c, val: n,
       say: { t: 'Suskaičiuok, kiek yra', l: 'lt-LT' } };
   },
-  missing() {
-    const cc = rnd(5, 20), a = rnd(1, cc - 1), r = cc - a;
-    const c = choices(r, numWrongs(r, 0, 20));
+  missing(l = 2) {
+    const M = MX[l - 1], cc = rnd(5, M), a = rnd(1, cc - 1), r = cc - a;
+    const c = choices(r, numWrongs(r, 0, M));
     return { type: 'missing', prompt: 'Kokio skaičiaus trūksta?', vis: `${a} + ? = ${cc}`, visClass: 'eq', ...c, val: r,
       say: { t: 'Kokio skaičiaus trūksta?', l: 'lt-LT' } };
   },
-  seq() {
-    const step = pick([1, 1, 2, 5]), start = rnd(0, 20 - 4 * step);
+  seq(l = 2) {
+    const M = MX[l - 1], step = pick([[1, 1, 2], [1, 1, 2, 5], [1, 2, 5, 10]][l - 1]), start = rnd(0, M - 4 * step);
     const seq = [0, 1, 2, 3, 4].map(i => start + i * step);
     const h = rnd(1, 3), r = seq[h];
     const show = seq.map((v, i) => i === h ? '?' : v).join(', ');
-    const c = choices(r, numWrongs(r, 0, 20));
+    const c = choices(r, numWrongs(r, 0, M));
     return { type: 'seq', prompt: 'Kokio skaičiaus trūksta eilutėje?', vis: show, visClass: 'eq', ...c, val: r,
       say: { t: 'Kokio skaičiaus trūksta eilutėje?', l: 'lt-LT' } };
   },
-  story() {
-    const e = pick(EMO), n = pick(NAMES);
+  story(l = 2) {
+    const e = pick(EMO), n = pick(NAMES), SM = l === 1 ? 10 : 20;
     if (Math.random() < 0.5) {
-      const a = rnd(1, 10), b = rnd(1, Math.min(10, 20 - a)), r = a + b;
-      const c = choices(r, numWrongs(r, 0, 20));
+      const a = rnd(1, Math.min(10, SM - 1)), b = rnd(1, Math.min(10, SM - a)), r = a + b;
+      const c = choices(r, numWrongs(r, 0, SM));
       return { type: 'story', prompt: `${n} turėjo ${a} ${e} ir gavo dar ${b} ${e}. Kiek ${e} dabar?`, vis: `${e}`, ...c, val: r,
         say: { t: `${n} turėjo ${a} ir gavo dar ${b}. Kiek dabar?`, l: 'lt-LT' } };
     }
-    const a = rnd(3, 15), b = rnd(1, a - 1), r = a - b;
-    const c = choices(r, numWrongs(r, 0, 20));
+    const a = rnd(3, SM === 10 ? 10 : 15), b = rnd(1, a - 1), r = a - b;
+    const c = choices(r, numWrongs(r, 0, SM));
     return { type: 'story', prompt: `${n} turėjo ${a} ${e} ir atidavė ${b} ${e}. Kiek ${e} liko?`, vis: `${e}`, ...c, val: r,
       say: { t: `${n} turėjo ${a} ir atidavė ${b}. Kiek liko?`, l: 'lt-LT' } };
+  },
+  clock(l = 2) {
+    const h = rnd(1, 12), m = l >= 2 && Math.random() < 0.5 ? 30 : 0, lab = (hh, mm) => `${hh}:${mm ? '30' : '00'}`;
+    const wr = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(x => x !== h)).slice(0, 3).map(x => lab(x, m));
+    if (l >= 2) wr.unshift(lab(h, m ? 0 : 30));
+    const c = choices(lab(h, m), wr);
+    return { type: 'clock', prompt: 'Kiek valandų rodo laikrodis?', vis: clockSvg(h, m), ...c, val: lab(h, m),
+      say: { t: 'Kiek valandų rodo laikrodis?', l: 'lt-LT' } };
+  },
+  coins(l = 2) {
+    const max = [5, 10, 20][l - 1], target = rnd(2, max), items = [];
+    let left = target;
+    while (left > 0) { const v = pick([1, 2, 2].concat(l === 3 ? [5, 5] : []).filter(x => x <= left)); items.push(v); left -= v; }
+    items.sort((a, b) => b - a);
+    const vis = items.map(v => v === 5 ? '<span class="note">5 €</span>' : `<span class="coin ${v === 2 ? 'c2' : ''}">${v} €</span>`).join('');
+    const c = choices(target, numWrongs(target, 1, max + 3));
+    return { type: 'coins', prompt: 'Kiek čia eurų?', vis, ...c, optLabels: c.opts.map(x => x + ' €'), val: target,
+      say: { t: 'Kiek čia eurų?', l: 'lt-LT' } };
+  },
+  shape() {
+    const [w, f] = pick(SHAPES), col = pick(['#3b82f6', '#22c55e', '#f97316', '#a855f7', '#ec4899', '#facc15']);
+    const c = choices(w, SHAPES.map(x => x[0]).filter(x => x !== w));
+    return { type: 'shape', prompt: 'Kokia tai figūra?', vis: `<svg viewBox="0 0 120 120" width="170" height="170">${f(col)}</svg>`, ...c, val: w,
+      say: { t: 'Kokia tai figūra?', l: 'lt-LT' }, after: { t: w, l: 'lt-LT' } };
   }
 };
 
@@ -401,6 +512,20 @@ const LT = {
     const opts = ['Balsė', 'Priebalsė'];
     return { type: 'vc', prompt: 'Ar ši raidė balsė, ar priebalsė?', vis: `${L} ${L.toLowerCase()}`, visClass: 'eq',
       opts, ans: isV ? 0 : 1, val: isV ? 'Balsė' : 'Priebalsė', say: { t: 'Ar ši raidė balsė, ar priebalsė?', l: 'lt-LT' } };
+  },
+  pic() {
+    const o = pick(LT_WORDS);
+    const c = choices(o.w, shuffle(LT_WORDS.filter(x => x !== o)).slice(0, 3).map(x => x.w));
+    return { type: 'pic', prompt: 'Kuris žodis tinka paveikslėliui?', vis: `<span class="emo">${o.e}</span>`, ...c, val: o.w,
+      say: { t: 'Kuris žodis tinka paveikslėliui?', l: 'lt-LT' }, after: { t: o.w, l: 'lt-LT' } };
+  },
+  build() {                                   // sudėti žodį spaudant raides iš eilės
+    const o = pick(LT_WORDS.filter(x => [...x.w].length <= 5)), letters = [...o.w];
+    let opts = shuffle(letters);
+    for (let k = 0; k < 5 && opts.join('') === o.w; k++) opts = shuffle(letters);
+    return { type: 'build', build: true, word: letters, pos: 0, prompt: 'Sudėk žodį iš raidžių',
+      vis: `<span class="emo">${o.e}</span><span class="slots" id="slots">${letters.map(() => '_').join(' ')}</span>`,
+      opts, ans: -1, val: o.w, say: { t: `Sudėk žodį ${o.w}`, l: 'lt-LT' }, after: { t: o.w, l: 'lt-LT' } };
   }
 };
 
@@ -442,31 +567,47 @@ const EN = {
     const c = choices(w, shuffle(THINGS.map(x => x[0]).filter(x => x !== w)).slice(0, 3));
     return { type: 'object', prompt: 'What is it? (Kas tai?)', vis: `<span class="emo">${e}</span>`, ...c, val: w,
       say: { t: 'What is it?', l: 'en-GB' }, after: { t: w, l: 'en-GB' } };
+  },
+  listen() {                                  // išgirsti žodį ir pasirinkti paveikslėlį (skaityti nereikia)
+    const all = ANIMALS.concat(THINGS), [w, e] = pick(all);
+    const c = choices(e, shuffle(all.filter(x => x[0] !== w)).slice(0, 3).map(x => x[1]));
+    return { type: 'listen', prompt: 'Listen and choose! (Klausyk ir pasirink)', vis: '<span class="emo">👂</span>', ...c, emoOpts: true, val: w,
+      say: { t: w, l: 'en-GB' }, after: { t: w, l: 'en-GB' } };
   }
 };
 
+// Užduočių rinkiniai pagal lygį (1 – lengviausias, 3 – sunkiausias), po 10.
 const SUBJECTS = {
-  math: { name: 'Matematika', ico: '🔢', lang: 'lt', gen: MATH,
-    bag: ['add','add','sub','sub','cmp','count','missing','seq','story','story'] },
-  lt:   { name: 'Lietuvių kalba', ico: '🔤', lang: 'lt', gen: LT,
-    bag: ['first','first','last','mletter','mletter','syll','syll','vc','vc','first'] },
-  en:   { name: 'English', ico: '🇬🇧', lang: 'en', gen: EN,
-    bag: ['color','color','num2word','word2num','animal','animal','object','object','num2word','word2num'] }
+  math: { name: 'Matematika', ico: '🔢', lang: 'lt', gen: MATH, bags: [
+    ['add','add','sub','sub','cmp','count','missing','seq','shape','clock'],
+    ['add','add','sub','sub','cmp','missing','seq','story','clock','coins'],
+    ['add','add','sub','sub','missing','seq','story','story','clock','coins'] ] },
+  lt:   { name: 'Lietuvių kalba', ico: '🔤', lang: 'lt', gen: LT, bags: [
+    ['first','first','last','pic','pic','pic','vc','vc','mletter','syll'],
+    ['first','last','pic','mletter','mletter','syll','syll','vc','build','build'],
+    ['first','last','mletter','mletter','syll','syll','vc','build','build','build'] ] },
+  en:   { name: 'English', ico: '🇬🇧', lang: 'en', gen: EN, bags: [
+    ['color','color','listen','listen','listen','animal','animal','object','num2word','word2num'],
+    ['color','listen','listen','animal','animal','object','object','num2word','num2word','word2num'],
+    ['color','listen','listen','animal','object','object','num2word','num2word','word2num','word2num'] ] }
 };
+const LEVEL_NAME = ['', '1 lygis', '2 lygis', '3 lygis'];
 const TYPE_LABEL = {
   add:'Sudėtis', sub:'Atimtis', cmp:'Skaičių palyginimas', count:'Skaičiavimas', missing:'Trūkstamas skaičius',
   seq:'Skaičių eilutė', story:'Uždaviniai žodžiais', first:'Pirma raidė', last:'Paskutinė raidė',
   mletter:'Trūkstama raidė', syll:'Skiemenys', vc:'Balsės ir priebalsės', color:'Spalvos',
-  num2word:'Skaičiai (žodis)', word2num:'Skaičiai (skaitmuo)', animal:'Gyvūnai', object:'Daiktai'
+  num2word:'Skaičiai (žodis)', word2num:'Skaičiai (skaitmuo)', animal:'Gyvūnai', object:'Daiktai',
+  clock:'Laikrodis', coins:'Pinigai', shape:'Figūros', pic:'Žodis pagal paveikslėlį', build:'Žodžio sudėjimas', listen:'Klausymas (EN)'
 };
 
 function makeRound(subj) {
   const S = SUBJECTS[subj], seen = new Set(), qs = [];
-  for (const t of shuffle(S.bag)) {
+  const lvl = Math.min(3, Math.max(1, (st.levels || {})[subj] || 1));
+  for (const t of shuffle(S.bags[lvl - 1])) {
     let q = null;
     for (let k = 0; k < 8; k++) {
-      q = S.gen[t]();
-      const key = q.type + '|' + q.prompt + '|' + q.vis;
+      q = S.gen[t](lvl);
+      const key = q.type + '|' + q.prompt + '|' + q.vis + '|' + (q.say ? q.say.t : '');
       if (!seen.has(key)) { seen.add(key); break; }
     }
     q.subj = subj; qs.push(q);
@@ -489,26 +630,71 @@ function render() {
   const f = { home: vHome, quiz: vQuiz, done: vDone, yt: vYT, ytplay: vYTPlay, ytend: vYTEnd, pin: vPin, parent: vParent }[view];
   app.innerHTML = f();
   window.scrollTo(0, 0);
+  if (view === 'quiz' && st.settings.autoRead) {          // klausimą perskaityti automatiškai
+    const q = S.qs[S.i];
+    if (q.say) setTimeout(() => { if (view === 'quiz' && S && S.qs[S.i] === q && !S.locked) speak(q.say.t, q.say.l); }, 350);
+  }
+  showCheer();
+}
+
+/* ---------- serija, ženkleliai, tėvų pagyrimas ---------- */
+const dayShift = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv-SE'); };
+function curStreak() { const s = st.streak || {}; return (s.last === today() || s.last === dayShift(-1)) ? (s.n || 0) : 0; }
+function bumpStreak() {
+  const s = st.streak = Object.assign({ last: '', n: 0 }, st.streak);
+  if (s.last === today()) return;
+  s.n = s.last === dayShift(-1) ? (s.n || 0) + 1 : 1; s.last = today();
+}
+const BADGES = [
+  { id: 'first',   ico: '🎯', name: 'Pirmas raundas',     ok: () => st.rounds >= 1 },
+  { id: 'perfect', ico: '💯', name: '10 iš 10',           ok: () => S && S.correct === S.qs.length },
+  { id: 'r10',     ico: '🏃', name: '10 raundų',          ok: () => st.rounds >= 10 },
+  { id: 'r50',     ico: '🚀', name: '50 raundų',          ok: () => st.rounds >= 50 },
+  { id: 's3',      ico: '🔥', name: '3 dienos iš eilės',  ok: () => curStreak() >= 3 },
+  { id: 's7',      ico: '🌈', name: '7 dienos iš eilės',  ok: () => curStreak() >= 7 },
+  { id: 'st100',   ico: '⭐', name: '100 žvaigždučių',    ok: () => st.stars >= 100 },
+  { id: 'st500',   ico: '🌟', name: '500 žvaigždučių',    ok: () => st.stars >= 500 },
+  { id: 'all3',    ico: '🎒', name: 'Visi 3 dalykai per dieną', ok: () => ['math', 'lt', 'en'].every(s => st.log.some(x => x.d === today() && x.s === s)) },
+  { id: 'lvl3',    ico: '🏆', name: 'Pasiektas 3 lygis',  ok: () => Object.values(st.levels || {}).some(l => l >= 3) }
+];
+function checkBadges() {
+  st.badges = st.badges || {};
+  const nw = [];
+  for (const b of BADGES) if (!st.badges[b.id] && b.ok()) { st.badges[b.id] = today(); nw.push(b); }
+  return nw;
+}
+const badgeHtml = b => `<div class="badge ${st.badges && st.badges[b.id] ? 'on' : 'off'}"><span>${b.ico}</span>${b.name}</div>`;
+function showCheer() {
+  const c = st.cheer || {};
+  if (!c.id || c.id <= (st.cheerSeen || 0) || !['home', 'done', 'yt'].includes(view) || document.getElementById('cheer')) return;
+  const o = document.createElement('div'); o.className = 'overlay'; o.id = 'cheer';
+  o.innerHTML = `<div class="card"><div class="big-heart">❤️</div><div class="qprompt">${esc(c.text)}</div>
+    <p class="muted">Žinutė nuo tėvų</p><button class="btn" id="cheerOk">Ačiū! 😊</button></div>`;
+  document.body.appendChild(o);
+  o.querySelector('#cheerOk').onclick = () => { st.cheerSeen = c.id; save(); o.remove(); stopSpeech(); };
+  SND.win(); confetti(30);
+  setTimeout(() => speak(String(c.text).replace(/\p{Extended_Pictographic}/gu, ''), 'lt-LT'), 700);
 }
 
 /* ---------- pradžia ---------- */
 function vHome() {
-  const left = Math.max(0, st.settings.cap * 60 - earnedToday());
   const pct = Math.min(100, Math.round(earnedToday() / (st.settings.cap * 60) * 100));
   const ox = st.settings.oxford ? `
     <button class="tile ext" data-act="link" data-k="oxford"><span class="ico">📘</span>Oxford<small>atsidaro naršyklėje</small></button>` : '';
-  const ytLocked = st.balance <= 0;
+  const ytLocked = st.balance <= 0, streak = curStreak(), lv = s => `<span class="lvl">${LEVEL_NAME[(st.levels || {})[s] || 1]}</span>`;
+  const got = BADGES.filter(b => st.badges && st.badges[b.id]).length;
   return `
   <div class="top">
-    <h1>Labas! 👋</h1>
+    <h1>Labas${st.settings.name ? ', ' + esc(st.settings.name) : ''}! 👋</h1>
+    ${streak ? `<div class="pill fire" title="Dienos iš eilės">🔥 ${streak}</div>` : ''}
     <div class="pill">⭐ ${st.stars}</div>
     <div class="pill yt">🎬 ${fmt(st.balance)}</div>
     <button class="gear" data-act="parent" aria-label="Tėvams">⚙️</button>
   </div>
   <div class="grid">
-    <button class="tile math" data-act="start" data-s="math"><span class="ico">🔢</span>Matematika<small>10 užduočių</small></button>
-    <button class="tile lt" data-act="start" data-s="lt"><span class="ico">🔤</span>Lietuvių kalba<small>10 užduočių</small></button>
-    <button class="tile en" data-act="start" data-s="en"><span class="ico">🇬🇧</span>English<small>10 tasks</small></button>
+    <button class="tile math" data-act="start" data-s="math"><span class="ico">🔢</span>Matematika<small>10 užduočių</small>${lv('math')}</button>
+    <button class="tile lt" data-act="start" data-s="lt"><span class="ico">🔤</span>Lietuvių kalba<small>10 užduočių</small>${lv('lt')}</button>
+    <button class="tile en" data-act="start" data-s="en"><span class="ico">🇬🇧</span>English<small>10 tasks</small>${lv('en')}</button>
     <button class="tile ext" data-act="link" data-k="eduka"><span class="ico">📚</span>EDUKA<small>atsidaro naršyklėje</small></button>
     ${ox}
     <button class="tile yt ${ytLocked ? 'locked' : ''}" data-act="yt"><span class="ico">${ytLocked ? '🔒' : '🎬'}</span>YouTube<small>${ytLocked ? 'užsidirbk laiko' : 'liko ' + fmt(st.balance)}</small></button>
@@ -521,6 +707,7 @@ function vHome() {
       <span class="muted">Tėvai patvirtina ir gauni +${st.settings.edukaMin} min.</span>
     </div>
   </div>
+  <div class="card"><h2>🏅 Mano ženkleliai (${got} / ${BADGES.length})</h2><div class="badges">${BADGES.map(badgeHtml).join('')}</div></div>
   <p class="muted center" style="font-size:13px;opacity:.7">Versija ${VERSION}</p>`;
 }
 
@@ -529,7 +716,8 @@ function startRound(subj) { S = { subj, qs: makeRound(subj), i: 0, correct: 0, l
 function vQuiz() {
   const q = S.qs[S.i], n = S.qs.length;
   const labels = q.optLabels || q.opts;
-  const cls = q.opts.length === 4 ? 'n4' : q.opts.length === 3 ? 'n3' : '';
+  const cls = q.build ? '' : q.opts.length === 4 ? 'n4' : q.opts.length === 3 ? 'n3' : '';
+  const grid = q.build ? ` style="grid-template-columns:repeat(${q.opts.length},1fr)"` : '';
   return `
   <div class="qhead">
     <button class="btn gray small" data-act="quit">← Pradžia</button>
@@ -539,27 +727,48 @@ function vQuiz() {
   <div class="qcard">
     <div class="qprompt">${esc(q.prompt)}${q.say ? `<button class="spk" data-act="say" aria-label="Perskaityti">🔊</button>` : ''}</div>
     <div class="qvis ${q.visClass || ''}">${q.vis}</div>
-    <div class="opts ${cls}">
-      ${labels.map((o, i) => `<button class="opt" data-act="ans" data-i="${i}">${esc(o)}</button>`).join('')}
+    <div class="opts ${cls}"${grid}>
+      ${labels.map((o, i) => `<button class="opt${q.emoOpts ? ' emo' : ''}" data-act="ans" data-i="${i}">${esc(o)}</button>`).join('')}
     </div>
     <div class="fb" id="fb"></div>
     <div id="nextWrap"></div>
   </div>`;
 }
 function answer(i) {
-  if (S.locked) return; S.locked = true;
-  const q = S.qs[S.i], ok = i === q.ans;
-  st.log.push({ d: today(), s: q.subj, t: q.type, ok }); if (st.log.length > 3000) st.log = st.log.slice(-3000);
+  if (S.locked) return;
+  const q = S.qs[S.i];
+  if (q.build) { buildTap(i); return; }
+  S.locked = true;
+  const ok = i === q.ans;
+  app.querySelectorAll('.opt').forEach((b, k) => { if (k === q.ans) b.classList.add('ok'); else if (k === i) b.classList.add('bad'); else b.classList.add('dim'); });
+  settle(q, ok);
+}
+function buildTap(i) {                        // „Sudėk žodį“: raidės spaudžiamos iš eilės
+  const q = S.qs[S.i], btn = app.querySelectorAll('.opt')[i], sl = document.getElementById('slots');
+  if (!btn || btn.disabled) return;
+  if (q.opts[i] === q.word[q.pos]) {
+    q.pos++; btn.disabled = true; SND.tap();
+    if (sl) sl.textContent = q.word.map((ch, k) => k < q.pos ? ch : '_').join(' ');
+    if (q.pos === q.word.length) { S.locked = true; settle(q, true); }
+  } else {
+    S.locked = true; btn.classList.add('bad');
+    if (sl) sl.textContent = q.word.join(' ');
+    settle(q, false);
+  }
+}
+function settle(q, ok) {
+  st.log.push({ d: today(), s: q.subj, t: q.type, ok });
   if (ok) { S.correct++; st.stars++; }
   save();
-  const btns = app.querySelectorAll('.opt');
-  btns.forEach((b, k) => { if (k === q.ans) b.classList.add('ok'); else if (k === i) b.classList.add('bad'); else b.classList.add('dim'); });
   const fb = document.getElementById('fb');
   const en = SUBJECTS[q.subj].lang === 'en';
   fb.className = 'fb ' + (ok ? 'ok' : 'bad');
-  fb.textContent = ok ? (en ? '⭐ Great!' : '⭐ Šaunuolis!') : (en ? 'Try again next time! 💪' : 'Nieko tokio! Teisingas atsakymas pažymėtas žaliai. 💪');
+  fb.textContent = ok ? (en ? '⭐ Great!' : '⭐ Puiku!') : (en ? 'Try again next time! 💪' : q.build ? 'Nieko tokio! Štai kaip rašoma. 💪' : 'Nieko tokio! Teisingas atsakymas pažymėtas žaliai. 💪');
+  if (ok) { SND.ok(); confetti(8); } else SND.bad();
   if (q.after) speak(q.after.t, q.after.l);
-  if (ok) setTimeout(() => { if (view === 'quiz') nextQ(); }, 1100);
+  else if (st.settings.autoRead) speak(ok ? (en ? 'Great!' : 'Puiku!') : (en ? 'Oops!' : 'Nieko tokio'), en ? 'en-GB' : 'lt-LT');
+  const cur = S;
+  if (ok) setTimeout(() => { if (view === 'quiz' && S === cur) nextQ(); }, 1300);
   else document.getElementById('nextWrap').innerHTML = `<button class="btn" style="margin-top:12px" data-act="next">Toliau →</button>`;
 }
 function nextQ() {
@@ -568,21 +777,36 @@ function nextQ() {
 }
 function finishRound() {
   const ok = S.correct >= st.settings.minCorrect;
+  st.rounds = (st.rounds || 0) + 1; bumpStreak();
+  st.levels = Object.assign({}, DEFAULTS.levels, st.levels);
+  const lv = st.levels[S.subj] || 1;
+  S.lvlUp = 0; S.lvlDown = false;
+  if (S.correct >= 9 && lv < 3) { st.levels[S.subj] = lv + 1; S.lvlUp = lv + 1; }
+  else if (S.correct <= 4 && lv > 1) { st.levels[S.subj] = lv - 1; S.lvlDown = true; }
+  S.newBadges = checkBadges();
   S.earnedSec = ok ? credit(st.settings.perRound * 60) : 0;
   S.passed = ok; save(); go('done');
+  if (ok || S.lvlUp || S.newBadges.length) { SND.win(); confetti(ok ? 45 : 25); }
+  if (st.settings.autoRead) speak(`Teisingai ${S.correct} iš ${S.qs.length}.` + (S.lvlUp ? ' Naujas lygis!' : ''), 'lt-LT');
 }
 function vDone() {
   const n = S.qs.length, stars = '⭐'.repeat(S.correct);
   let msg;
   if (!S.passed) msg = `Reikia bent ${st.settings.minCorrect} teisingų, kad gautum „YouTube“ laiko. Pabandyk dar kartą! 💪`;
-  else if (S.earnedSec <= 0) msg = 'Šiandien jau užsidirbai didžiausią leistiną „YouTube“ laiką. Šaunuolis! 🎉';
+  else if (S.earnedSec <= 0) msg = 'Šiandien jau užsidirbai didžiausią leistiną „YouTube“ laiką. Puiku! 🎉';
   else msg = `Gavai +${Math.round(S.earnedSec / 60)} min. „YouTube“ laiko! 🎬`;
+  const nb = S.newBadges || [], streak = curStreak();
   return `
   <div class="qcard" style="margin-top:20px">
     <div class="starburst">${S.passed ? '🎉' : '💪'}</div>
     <div class="qprompt">Teisingai: ${S.correct} iš ${n}</div>
     <div class="qvis" style="min-height:0;font-size:34px">${stars}</div>
     <div class="fb ${S.passed ? 'ok' : ''}" style="color:${S.passed ? '' : '#374151'}">${msg}</div>
+    ${S.lvlUp ? `<div class="fb ok">🚀 Naujas lygis: ${S.lvlUp}! Užduotys bus šiek tiek sunkesnės.</div>` : ''}
+    ${S.lvlDown ? `<p class="muted">Kitą kartą užduotys bus šiek tiek lengvesnės.</p>` : ''}
+    ${nb.length ? `<div class="card" style="background:#fef3c7;margin:12px 0 0"><b>Naujas ženklelis!</b>
+      <div class="badges" style="justify-content:center;margin-top:8px">${nb.map(badgeHtml).join('')}</div></div>` : ''}
+    ${streak >= 2 ? `<p class="muted" style="font-size:18px">🔥 ${streak} d. iš eilės!</p>` : ''}
     <div class="row" style="justify-content:center;margin-top:16px">
       <button class="btn" data-act="start" data-s="${S.subj}">Dar kartą</button>
       <button class="btn gray" data-act="home">Pradžia</button>
@@ -754,6 +978,18 @@ function vParent() {
       <button class="btn small red" data-act="resetbal">Nunulinti laiką</button>
     </div></div>
 
+  <div class="card"><h2>❤️ Pagyrimas vaikui</h2>
+    <input type="text" id="cheertext" maxlength="80" placeholder="Didžiuojuosi tavimi! ❤️">
+    <div class="row" style="margin-top:12px"><button class="btn small" data-act="cheer">Siųsti ❤️</button></div>
+    <p class="hint">Vaiko planšetėje pasirodys širdelė su šia žinute (per ~1 min., jei įjungta sinchronizacija).</p></div>
+
+  <div class="card"><h2>Vaikas ir lygiai</h2>
+    <label>Vaiko vardas (kaip kreipiamės, pvz. „Lukrecija“, „Jonai“)</label><input type="text" data-set="name" maxlength="20" value="${esc(s.name || '')}">
+    <label>Sunkumo lygis (1–3). Keičiasi pats: 9–10 teisingų → aukštyn, 0–4 → žemyn.</label>
+    <div class="row">${['math', 'lt', 'en'].map(k => `<span style="flex:1;min-width:120px">${SUBJECTS[k].ico} ${SUBJECTS[k].name}
+      <input type="number" min="1" max="3" data-lvl="${k}" value="${(st.levels || {})[k] || 1}"></span>`).join('')}</div>
+    <p class="muted" style="margin-top:12px">Ženklelių: <b>${BADGES.filter(b => st.badges && st.badges[b.id]).length} / ${BADGES.length}</b> · dienų iš eilės: <b>${curStreak()}</b> · raundų iš viso: <b>${st.rounds || 0}</b></p></div>
+
   <div class="card"><h2>Taisyklės</h2>
     <label>Minučių už sėkmingą raundą (10 užduočių)</label><input type="number" min="0" max="60" data-set="perRound" value="${s.perRound}">
     <label>Kiek teisingų iš 10 reikia, kad gautų laiko</label><input type="number" min="1" max="10" data-set="minCorrect" value="${s.minCorrect}">
@@ -789,7 +1025,9 @@ function vParent() {
 
   <div class="card"><h2>Pažanga (7 dienos)</h2>${statsHtml()}</div>
 
-  <div class="card"><h2>PIN kodas ir balsas</h2>
+  <div class="card"><h2>PIN kodas, garsas ir balsas</h2>
+    <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-set="sound" ${s.sound ? 'checked' : ''} style="width:26px;height:26px">Garsai ir konfeti</label>
+    <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-set="autoRead" ${s.autoRead ? 'checked' : ''} style="width:26px;height:26px">Klausimus perskaityti automatiškai</label>
     <label>Naujas PIN (4 skaitmenys)</label><input type="text" inputmode="numeric" maxlength="4" data-set="pin" value="${esc(s.pin)}">
     <p class="hint">Dabar PIN: ${s.pin === '1234' ? '<b>1234 (pakeisk!)</b>' : 'pakeistas'}.</p>
     <p>Lietuviškas balsas planšetėje: <b>${hasVoice('lt') ? 'yra' : 'nerastas'}</b> · anglų: <b>${hasVoice('en') ? 'yra' : 'nerastas'}</b></p>
@@ -828,6 +1066,12 @@ const H = {
   pin(d) { pinKey(d.k); },
   bonus(d) { st.bonusTotal = (st.bonusTotal || 0) + (+d.m) * 60; applyBonus(); save(); render(); },
   resetbal() { st.balance = 0; save(); render(); },
+  cheer() {
+    const text = document.getElementById('cheertext').value.trim() || 'Didžiuojuosi tavimi! ❤️';
+    st.cheer = { id: Date.now(), text }; st.cheerSeen = st.cheer.id;   // šiame įrenginyje nerodyti
+    save(); sync(); render();
+    toast(famCode ? 'Išsiųsta! Vaiko planšetėje pasirodys per minutę.' : 'Įjunk sinchronizaciją, kad žinutė nueitų į kitą įrenginį.');
+  },
   addvideo() {
     const url = document.getElementById('vurl').value, title = document.getElementById('vtitle').value.trim();
     const p = parseYT(url);
@@ -855,6 +1099,11 @@ app.addEventListener('change', e => {
     if (v === famCode) return;
     setFam(v); joining = true; syncMsg = 'Sinchronizuojama…'; render(); sync(); return;
   }
+  if (e.target.dataset && e.target.dataset.lvl) {
+    st.levels = Object.assign({}, DEFAULTS.levels, st.levels);
+    st.levels[e.target.dataset.lvl] = Math.min(3, Math.max(1, parseInt(e.target.value, 10) || 1));
+    save(); toast('Išsaugota'); render(); return;
+  }
   const k = e.target.dataset && e.target.dataset.set; if (!k) return;
   let v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   if (['perRound', 'minCorrect', 'cap', 'edukaMin'].includes(k)) {
@@ -862,6 +1111,7 @@ app.addEventListener('change', e => {
     if (k === 'minCorrect') v = Math.min(10, Math.max(1, v));
   }
   if (k === 'pin') { if (!/^\d{4}$/.test(v)) { toast('PIN turi būti 4 skaitmenys.'); render(); return; } }
+  if (k === 'name') v = String(v).trim();
   st.settings[k] = v; save(); toast('Išsaugota'); if (k === 'pin') render();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopSpeech(); });
@@ -876,7 +1126,7 @@ function backFromFullYT() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) backFromFullYT(); });
 
 /* testavimo kabliukas (?selftest) */
-window.__vp = { SUBJECTS, makeRound, parseYT, credit, getState: () => st, LT_WORDS, sync, setFam, newFamCode };
+window.__vp = { getRound: () => S, SUBJECTS, makeRound, parseYT, credit, getState: () => st, LT_WORDS, sync, setFam, newFamCode };
 render();
 backFromFullYT();
 sync();

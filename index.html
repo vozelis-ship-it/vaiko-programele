@@ -125,6 +125,8 @@ const KEY = 'vp_v1';
 const DEFAULTS = {
   stars: 0,
   balance: 0,                       // sekundės „YouTube“ laiko
+  bonusTotal: 0,                    // tėvų dalis: visas kada nors pridėtas papildomas laikas (sek.)
+  bonusApplied: 0,                  // vaiko dalis: kiek jo jau pridėta prie balance
   earned: { date: '', sec: 0 },     // šiandien užsidirbta sekundžių
   log: [],                          // {d, s, t, ok}
   videos: [],                       // {kind:'video'|'playlist', id, title}
@@ -134,6 +136,7 @@ const DEFAULTS = {
     minCorrect: 7,                  // kiek teisingų iš 10 reikia
     cap: 20,                        // maks. minučių per dieną
     edukaMin: 5,                    // minutės už patvirtintą EDUKA/Oxford užduotį
+    fullYT: false,                  // leisti atidaryti visą „YouTube“ (atskirai, laikas nuskaičiuojamas grįžus)
     eduka: 'https://eduka.lt/student/my-groups',
     oxford: 'https://englishhub.oup.com/young-learner/myDashboard'
   }
@@ -157,9 +160,18 @@ const FB = { apiKey: 'AIzaSyCtQc4Rz7ETpxka5gNSqPMR2WTmmHtcQy8', projectId: 'lukr
 const FAM_KEY = 'vp_family';
 let famCode = '';
 try { famCode = localStorage.getItem(FAM_KEY) || ''; } catch (e) {}
-const partP = o => JSON.stringify({ videos: o.videos, settings: o.settings });          // tėvų duomenys
-const partC = o => JSON.stringify({ stars: o.stars, balance: o.balance, earned: o.earned, log: o.log }); // vaiko duomenys
-let lastP = partP(st), lastC = partC(st), syncTimer = null, syncBusy = false, syncMsg = '';
+const partP = o => JSON.stringify({ videos: o.videos, settings: o.settings, bonusTotal: o.bonusTotal });          // tėvų duomenys
+const partC = o => JSON.stringify({ stars: o.stars, balance: o.balance, earned: o.earned, log: o.log, bonusApplied: o.bonusApplied }); // vaiko duomenys
+let lastP = partP(st), lastC = partC(st), syncTimer = null, syncBusy = false, syncMsg = '', joining = false;
+// Tėvų papildomas laikas keliauja kaip skirtumas (bonusTotal − bonusApplied), todėl nedingsta,
+// net jei vaiko duomenis kitame įrenginyje perrašo naujesni. Laiko žymos (cts) nekeičia.
+function applyBonus() {
+  const d = (st.bonusTotal || 0) - (st.bonusApplied || 0);
+  if (d <= 0) return;
+  st.balance += d; st.bonusApplied = st.bonusTotal; lastC = partC(st);
+  try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {}
+}
+applyBonus();
 function save() {
   if (st.log.length > 500) st.log = st.log.slice(-500);
   const p = partP(st), c = partC(st), now = Date.now();
@@ -187,15 +199,24 @@ async function sync() {
     else if (r.status !== 404) throw new Error('HTTP ' + r.status);
     let pulled = false, push = false;
     const playing = view === 'ytplay';
-    if (remote) {
+    const takeP = () => { st.videos = remote.videos || []; st.settings = Object.assign({}, DEFAULTS.settings, remote.settings || {});
+      st.bonusTotal = remote.bonusTotal || 0; st.pts = remote.pts || 0; pulled = true; };
+    const takeC = () => { st.stars = remote.stars || 0; st.balance = remote.balance || 0;
+      st.earned = Object.assign({}, DEFAULTS.earned, remote.earned || {}); st.log = remote.log || [];
+      st.bonusApplied = remote.bonusApplied || 0; st.cts = remote.cts || 0; pulled = true; };
+    if (remote && joining) {
+      // Prisijungiant prie esamo kodo laimi tas įrenginys, kuriame yra tikri duomenys (ne laiko žyma).
+      if ((remote.videos || []).length || !st.videos.length) takeP(); else { st.pts = Date.now(); lastP = partP(st); push = true; }
+      const act = o => (o.log || []).length + (o.stars || 0);
+      if (act(remote) >= act(st)) takeC(); else { st.cts = Date.now(); lastC = partC(st); push = true; }
+    } else if (remote) {
       const rp = remote.pts || 0, rc = remote.cts || 0, lp = st.pts || 0, lc = st.cts || 0;
-      if (rp > lp) { st.videos = remote.videos || []; st.settings = Object.assign({}, DEFAULTS.settings, remote.settings || {}); st.pts = rp; pulled = true; }
+      if (rp > lp) takeP();
       else if (rp < lp) push = true;
-      if (rc > lc && !playing) {
-        st.stars = remote.stars || 0; st.balance = remote.balance || 0;
-        st.earned = Object.assign({}, DEFAULTS.earned, remote.earned || {}); st.log = remote.log || []; st.cts = rc; pulled = true;
-      } else if (rc < lc) push = true;
+      if (rc > lc && !playing) takeC();
+      else if (rc < lc) push = true;
     } else push = true;
+    if (pulled) applyBonus();
     if (pulled) {
       lastP = partP(st); lastC = partC(st);
       try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {}
@@ -203,12 +224,13 @@ async function sync() {
     }
     if (push) {
       const body = { fields: {
-        data: { stringValue: JSON.stringify({ videos: st.videos, settings: st.settings, stars: st.stars, balance: st.balance, earned: st.earned, log: st.log, pts: st.pts || 0, cts: st.cts || 0 }) },
+        data: { stringValue: JSON.stringify({ videos: st.videos, settings: st.settings, bonusTotal: st.bonusTotal || 0, stars: st.stars, balance: st.balance, earned: st.earned, log: st.log, bonusApplied: st.bonusApplied || 0, pts: st.pts || 0, cts: st.cts || 0 }) },
         ts: { integerValue: String(Date.now()) } } };
       const w = await fetch(docUrl() + '&updateMask.fieldPaths=data&updateMask.fieldPaths=ts', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!w.ok) throw new Error('HTTP ' + w.status);
     }
+    joining = false;
     syncMsg = '✅ Sinchronizuota ' + new Date().toLocaleTimeString('lt-LT', { hour: '2-digit', minute: '2-digit' });
   } catch (e) { syncMsg = '⚠️ Nepavyko sinchronizuoti (' + (e.message || e) + ')'; }
   finally { syncBusy = false; const el = document.getElementById('syncMsg'); if (el) el.textContent = syncMsg; }
@@ -457,7 +479,7 @@ function makeRound(subj) {
 let view = 'home';
 let S = null;                 // aktyvus raundas
 let pinBuf = '', pinCb = null;
-let ytCur = null, player = null, tick = null, ytq = [], ytLoading = false;
+let ytCur = null, ytPl = null, player = null, tick = null, ytq = [], ytLoading = false;
 
 function go(v) { view = v; render(); }
 
@@ -574,9 +596,11 @@ function vYT() {
   if (st.balance <= 0) return t + `<div class="card center"><div class="starburst">🔒</div>
     <div class="qprompt">Užsidirbk laiko!</div><p class="muted" style="font-size:18px">Išspręsk užduotis ir gausi „YouTube“ laiko.</p>
     <button class="btn" data-act="home">Spręsti užduotis</button></div>`;
-  if (!st.videos.length) return t + `<div class="card center"><p style="font-size:20px">Dar nėra tėvų patvirtintų vaizdo įrašų.</p>
-    <p class="muted">Tėvai juos prideda per ⚙️ (Tėvams).</p></div>`;
-  return t + `<div class="vgrid">${st.videos.map((v, i) => `
+  const full = st.settings.fullYT ? `<div class="card row spread"><span style="font-size:18px"><b>🌐 Visas YouTube</b><br><span class="muted">Laikas skaičiuojamas, kol būsi ten.</span></span>
+    <button class="btn" data-act="fullyt">Atidaryti</button></div>` : '';
+  if (!st.videos.length) return t + full + (full ? '' : `<div class="card center"><p style="font-size:20px">Dar nėra tėvų patvirtintų vaizdo įrašų.</p>
+    <p class="muted">Tėvai juos prideda per ⚙️ (Tėvams).</p></div>`);
+  return t + full + `<div class="vgrid">${st.videos.map((v, i) => `
     <button class="vcard" data-act="play" data-i="${i}">
       ${v.kind === 'video' ? `<img alt="" src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg" onerror="this.outerHTML='<div class=ph>🎬</div>'">` : `<div class="ph">📺</div>`}
       <b>${esc(v.title || 'Vaizdo įrašas')}</b></button>`).join('')}</div>`;
@@ -605,7 +629,7 @@ function loadYT(cb) {
   document.head.appendChild(s);
 }
 function playVideo(v) {
-  ytCur = v; view = 'ytplay'; render();
+  ytCur = v; ytPl = null; view = 'ytplay'; render();
   loadYT(() => {
     if (view !== 'ytplay') return;
     const vars = { rel: 0, playsinline: 1, modestbranding: 1, iv_load_policy: 3, autoplay: 1 };
@@ -626,6 +650,8 @@ function startTick() {
   tick = setInterval(() => {
     if (!player || !player.getPlayerState) return;
     let s = -1; try { s = player.getPlayerState(); } catch (e) {}
+    if (s === 1 && ytCur && ytCur.kind === 'playlist' && !ytPl) { try { const pl = player.getPlaylist(); if (pl && pl.length) ytPl = pl.slice(); } catch (e) {} }
+    if (s === 1 && !videoAllowed()) { blockVideo(); return; }
     if (s === 1) {
       st.balance = Math.max(0, st.balance - 1); save();
       const el = document.getElementById('ytTime'); if (el) el.textContent = fmt(st.balance);
@@ -634,10 +660,35 @@ function startTick() {
   }, 1000);
 }
 function leaveYT() { stopTick(); killPlayer(); }
+// Leidžiami tik tėvų patvirtinti įrašai (ir įrašai iš patvirtinto grojaraščio).
+function curVideoId() {
+  let id = '';
+  try { id = (player.getVideoData() || {}).video_id || ''; } catch (e) {}
+  if (!id) { try { const p = parseYT(player.getVideoUrl()); if (p && p.kind === 'video') id = p.id; } catch (e) {} }
+  return id;
+}
+function videoAllowed() {
+  const id = curVideoId();
+  if (!id) return true;
+  if (st.videos.some(v => v.kind === 'video' && v.id === id)) return true;
+  if (ytCur && ytCur.kind === 'playlist' && (!ytPl || ytPl.includes(id))) return true;
+  return false;
+}
+function blockVideo() {
+  try {
+    if (ytCur.kind === 'video') player.cueVideoById(ytCur.id);
+    else player.cuePlaylist({ listType: 'playlist', list: ytCur.id });
+  } catch (e) { try { player.stopVideo(); } catch (x) {} }
+  const m = document.getElementById('ytMsg'); if (m) m.textContent = 'Šio vaizdo įrašo tėvai nepatvirtino. Žiūrėk patvirtintą.';
+}
 
 function parseYT(url) {
   url = (url || '').trim();
   const ID = /^[\w-]{11}$/;
+  if (ID.test(url)) return { kind: 'video', id: url };                     // vien įrašo ID
+  const m = url.match(/(?:https?:\/\/)?(?:[\w-]+\.)*(?:youtube\.com|youtube-nocookie\.com|youtu\.be)\/\S*/i);
+  if (m) url = m[0];                                                        // nuoroda tekste (pvz. iš „Bendrinti“)
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;                  // be https://
   try {
     const u = new URL(url), host = u.hostname.toLowerCase();
     if (host === 'youtu.be') { const id = u.pathname.slice(1).split('/')[0]; if (ID.test(id)) return { kind: 'video', id }; }
@@ -720,7 +771,9 @@ function vParent() {
       <div class="row spread" style="padding:8px 0;border-bottom:1px solid #e5e7eb">
         <span>${v.kind === 'video' ? '🎬' : '📺'} ${esc(v.title || v.id)}</span>
         <button class="btn small red" data-act="delvideo" data-i="${i}">Šalinti</button></div>`).join('') : '<p class="muted">Dar nėra pridėtų.</p>'}</div>
-    <p class="hint">Dalis vaizdo įrašų neleidžia rodyti jų kitose programose; tokie čia neatsidarys.</p></div>
+    <p class="hint">Dalis vaizdo įrašų neleidžia rodyti jų kitose programose; tokie čia neatsidarys.</p>
+    <label style="display:flex;gap:10px;align-items:center;margin-top:16px"><input type="checkbox" data-set="fullYT" ${s.fullYT ? 'checked' : ''} style="width:26px;height:26px">Leisti visą „YouTube“</label>
+    <p class="hint">Atsidaro atskirai (YouTube programėlėje ar naršyklėje), vaikas mato viską. Laikas nuskaičiuojamas grįžus į šią programą, bet sustabdyti „YouTube“ programa negali — tam naudok Family Link laiko ribas.</p></div>
 
   <div class="card"><h2>Sinchronizacija (kelis įrenginius)</h2>
     <label>Šeimos kodas (tą patį kodą įvesk ir telefone)</label>
@@ -762,15 +815,21 @@ const H = {
     });
   },
   yt() { go('yt'); },
+  fullyt() {
+    if (!st.settings.fullYT || st.balance <= 0) return;
+    st.ytAway = Date.now(); save();
+    window.open('https://www.youtube.com/', '_blank', 'noopener');
+  },
   play(d) { const v = st.videos[+d.i]; if (v && st.balance > 0) playVideo(v); },
   ytback() { leaveYT(); go('yt'); },
   pin(d) { pinKey(d.k); },
-  bonus(d) { st.balance += (+d.m) * 60; save(); render(); },
+  bonus(d) { st.bonusTotal = (st.bonusTotal || 0) + (+d.m) * 60; applyBonus(); save(); render(); },
   resetbal() { st.balance = 0; save(); render(); },
   addvideo() {
     const url = document.getElementById('vurl').value, title = document.getElementById('vtitle').value.trim();
     const p = parseYT(url);
-    if (!p) { toast('Nepavyko atpažinti „YouTube“ nuorodos.'); return; }
+    if (!p) { toast(/youtube\.com\/(@|c\/|channel\/|user\/)/i.test(url) ? 'Kanalo pridėti negalima — įklijuok konkretaus vaizdo įrašo ar grojaraščio nuorodą.' : 'Nepavyko atpažinti „YouTube“ nuorodos.'); return; }
+    if (st.videos.some(v => v.kind === p.kind && v.id === p.id)) { toast('Šis jau pridėtas.'); return; }
     st.videos.push({ kind: p.kind, id: p.id, title: title || (p.kind === 'video' ? 'Vaizdo įrašas' : 'Grojaraštis') });
     save(); render(); toast('Pridėta');
   },
@@ -790,10 +849,11 @@ app.addEventListener('change', e => {
     const v = e.target.value.trim().toLowerCase();
     if (v === '') { setFam(''); syncMsg = ''; toast('Sinchronizacija išjungta'); render(); return; }
     if (!/^[a-z0-9]{12,64}$/.test(v)) { toast('Kodas: 12–64 raidės ar skaičiai.'); render(); return; }
-    setFam(v); syncMsg = 'Sinchronizuojama…'; render(); sync(); return;
+    if (v === famCode) return;
+    setFam(v); joining = true; syncMsg = 'Sinchronizuojama…'; render(); sync(); return;
   }
   const k = e.target.dataset && e.target.dataset.set; if (!k) return;
-  let v = e.target.value;
+  let v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   if (['perRound', 'minCorrect', 'cap', 'edukaMin'].includes(k)) {
     v = Math.max(0, parseInt(v, 10) || 0);
     if (k === 'minCorrect') v = Math.min(10, Math.max(1, v));
@@ -802,10 +862,20 @@ app.addEventListener('change', e => {
   st.settings[k] = v; save(); toast('Išsaugota'); if (k === 'pin') render();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopSpeech(); });
+// Grįžus iš viso „YouTube“ nuskaičiuojamas ten praleistas laikas.
+function backFromFullYT() {
+  if (!st.ytAway) return;
+  const sec = Math.max(0, Math.round((Date.now() - st.ytAway) / 1000)), used = Math.min(sec, st.balance);
+  st.balance -= used; st.ytAway = 0; save();
+  if (view === 'home' || view === 'yt') render();
+  toast(`„YouTube“ sunaudota ${Math.max(1, Math.round(used / 60))} min.` + (st.balance <= 0 ? ' Laikas baigėsi!' : ''));
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) backFromFullYT(); });
 
 /* testavimo kabliukas (?selftest) */
 window.__vp = { SUBJECTS, makeRound, parseYT, credit, getState: () => st, LT_WORDS, sync, setFam, newFamCode };
 render();
+backFromFullYT();
 sync();
 setInterval(() => { if (view !== 'ytplay') sync(); }, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });

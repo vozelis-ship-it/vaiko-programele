@@ -80,9 +80,29 @@ function run() {
   E("document.querySelector('[data-act=resetcycle]').click()");
   ok(st().rewards.math === 0 && st().rewards.lt === 0, 'Mygtukas „Nunulinti ciklą“ veikia');
 
+  // --- lygiai: 3 raundai be klaidų → naujas lygis ---
+  fresh();
+  round('math', 10); round('math', 10);
+  ok(st().levels.math === 1 && st().perfects.math === 2, '2 raundai 10/10 — lygis dar nepakyla (💯 2/3)');
+  round('math', 9);
+  ok(st().levels.math === 1 && st().perfects.math === 2, '9/10 neskaičiuojamas kaip be klaidų');
+  ok(E('vDone()').includes('Iki naujo lygio') === false, '9/10 — „Be klaidų“ pranešimo nėra');
+  const s3 = round('math', 10);
+  ok(s3.lvlUp === 2 && st().levels.math === 2 && st().perfects.math === 0, '3-ias raundas be klaidų → 2 lygis, skaitliukas nusinulina');
+  ok(E('vDone()').includes('Naujas lygis: 2'), 'Rodomas „Naujas lygis: 2“');
+  round('lt', 10);
+  ok(E('vDone()').includes('Iki naujo lygio: 1/3'), 'Po raundo be klaidų rodoma „Iki naujo lygio: 1/3“');
+  E("go('home')");
+  ok(E('app.innerHTML').includes('1 lygis · 💯 1/3'), 'Kortelėje rodomas progresas „💯 1/3“');
+  round('math', 3);
+  ok(st().levels.math === 1 && st().perfects.math === 0, '0–4 teisingi → lygis žemyn, skaitliukas nusinulina');
+  fresh("st.levels.en = 3; st.perfects.en = 0");
+  round('en', 10); round('en', 10); round('en', 10);
+  ok(st().levels.en === 3, '3 lygis — aukščiausias, toliau nekyla');
+
   // --- seni duomenys ---
   E(`localStorage.setItem('vp_v1', JSON.stringify({ stars: 5, balance: 60, settings: { pin: '1111', cap: 20 } })); st = load()`);
-  ok(st().stars === 5 && st().rewards.math === 0 && E('perSubj()') === 3 && st().settings.pin === '1111', 'Seni duomenys be naujų laukų nesulūžta');
+  ok(st().stars === 5 && st().rewards.math === 0 && st().perfects.math === 0 && E('perSubj()') === 3 && st().settings.pin === '1111', 'Seni duomenys be naujų laukų nesulūžta');
   ok(E("C_F.includes('rewards') && !P_F.includes('rewards') && partP(st).includes('perSubject')"), 'Skaitliukai vaiko dalyje (cts), riba tėvų dalyje (pts)');
   E("localStorage.clear()");
 }

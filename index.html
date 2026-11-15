@@ -190,7 +190,7 @@ h2{margin:0 0 10px;font-size:22px}
    Duomenys saugomi planšetėje (localStorage) ir, jei įvestas šeimos kodas, sinchronizuojami su Firebase Firestore (be paskyrų, pagal slaptą kodą).
    ========================================================= */
 
-const VERSION = '1.7 (2026-11-15)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
+const VERSION = '1.8 (2026-11-15)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
 const app = document.getElementById('app');
 const KEY = 'vp_v1';
 const DEFAULTS = {
@@ -204,6 +204,7 @@ const DEFAULTS = {
   rounds: 0,                        // užbaigtų raundų skaičius
   rewards: { math: 0, lt: 0, en: 0 },// šio ciklo „YouTube“ atlygiai pagal dalyką (vaiko dalis)
   levels: { math: 1, lt: 1, en: 1 },// sunkumo lygis 1–3
+  perfects: { math: 0, lt: 0, en: 0 },// raundai be klaidų dabartiniame lygyje (3 → naujas lygis)
   streak: { last: '', n: 0 },       // kiek dienų iš eilės
   badges: {},                       // {id: data}
   cheer: { id: 0, text: '' },       // tėvų dalis: paskutinis pagyrimas
@@ -233,6 +234,7 @@ function load() {
         settings: Object.assign({}, DEFAULTS.settings, s.settings || {}),
         earned: Object.assign({}, DEFAULTS.earned, s.earned || {}),
         levels: Object.assign({}, DEFAULTS.levels, s.levels || {}),
+        perfects: Object.assign({}, DEFAULTS.perfects, s.perfects || {}),
         rewards: Object.assign({}, DEFAULTS.rewards, s.rewards || {})
       });
     }
@@ -248,7 +250,7 @@ const FAM_KEY = 'vp_family';
 let famCode = '';
 try { famCode = localStorage.getItem(FAM_KEY) || ''; } catch (e) {}
 const P_F = ['videos', 'settings', 'bonusTotal', 'cheer'];                                              // tėvų duomenys
-const C_F = ['stars', 'balance', 'earned', 'log', 'bonusApplied', 'rounds', 'levels', 'streak', 'badges', 'rewards']; // vaiko duomenys
+const C_F = ['stars', 'balance', 'earned', 'log', 'bonusApplied', 'rounds', 'levels', 'streak', 'badges', 'rewards', 'perfects']; // vaiko duomenys
 const pickF = (o, F) => { const r = {}; F.forEach(f => r[f] = o[f]); return r; };
 const partP = o => JSON.stringify(pickF(o, P_F));
 const partC = o => JSON.stringify(pickF(o, C_F));
@@ -294,6 +296,7 @@ async function sync() {
       st.settings = Object.assign({}, DEFAULTS.settings, st.settings || {}); st.pts = remote.pts || 0; pulled = true; };
     const takeC = () => { C_F.forEach(f => st[f] = clone(remote[f], DEFAULTS[f]));
       st.earned = Object.assign({}, DEFAULTS.earned, st.earned || {}); st.levels = Object.assign({}, DEFAULTS.levels, st.levels || {});
+      st.perfects = Object.assign({}, DEFAULTS.perfects, st.perfects || {});
       st.rewards = Object.assign({}, DEFAULTS.rewards, st.rewards || {}); st.cts = remote.cts || 0; pulled = true; };
     if (remote && joining) {
       // Prisijungiant prie esamo kodo laimi tas įrenginys, kuriame yra tikri duomenys (ne laiko žyma).
@@ -646,6 +649,7 @@ const SUBJECTS = {
     ['color','listen','listen','animal','object','object','num2word','num2word','word2num','word2num'] ] }
 };
 const LEVEL_NAME = ['', '1 lygis', '2 lygis', '3 lygis'];
+const PERFECT_TO_LEVEL = 3;                 // kiek raundų be klaidų reikia naujam lygiui
 const TYPE_LABEL = {
   add:'Sudėtis', sub:'Atimtis', cmp:'Skaičių palyginimas', count:'Skaičiavimas', missing:'Trūkstamas skaičius',
   seq:'Skaičių eilutė', story:'Uždaviniai žodžiais', first:'Pirma raidė', last:'Paskutinė raidė',
@@ -915,7 +919,8 @@ function vHome() {
   const pct = Math.min(100, Math.round(earnedToday() / (st.settings.cap * 60) * 100));
   const ox = st.settings.oxford ? `
     <button class="tile ext" data-act="link" data-k="oxford"><span class="ico">📘</span>Oxford<small>atsidaro naršyklėje</small></button>` : '';
-  const ytLocked = st.balance <= 0, streak = curStreak(), lv = s => `<span class="lvl">${LEVEL_NAME[(st.levels || {})[s] || 1]}</span>`;
+  const ytLocked = st.balance <= 0, streak = curStreak(), lv = s => { const l = (st.levels || {})[s] || 1;
+    return `<span class="lvl">${LEVEL_NAME[l]}${l < 3 ? ` · 💯 ${(st.perfects || {})[s] || 0}/${PERFECT_TO_LEVEL}` : ''}</span>`; };
   const got = BADGES.filter(b => st.badges && st.badges[b.id]).length;
   return `
   <div class="top">
@@ -1016,8 +1021,13 @@ function finishRound() {
   st.levels = Object.assign({}, DEFAULTS.levels, st.levels);
   const lv = st.levels[S.subj] || 1;
   S.lvlUp = 0; S.lvlDown = false;
-  if (S.correct >= 9 && lv < 3) { st.levels[S.subj] = lv + 1; S.lvlUp = lv + 1; }
-  else if (S.correct <= 4 && lv > 1) { st.levels[S.subj] = lv - 1; S.lvlDown = true; }
+  // Lygis kyla tik po PERFECT_TO_LEVEL raundų be klaidų (10 iš 10) tame lygyje; skaičiuojama sumiškai.
+  st.perfects = Object.assign({}, DEFAULTS.perfects, st.perfects);
+  S.perfect = S.correct === S.qs.length;
+  if (S.perfect && lv < 3) st.perfects[S.subj] = (st.perfects[S.subj] || 0) + 1;
+  if (lv < 3 && st.perfects[S.subj] >= PERFECT_TO_LEVEL) { st.levels[S.subj] = lv + 1; S.lvlUp = lv + 1; st.perfects[S.subj] = 0; }
+  else if (S.correct <= 4 && lv > 1) { st.levels[S.subj] = lv - 1; S.lvlDown = true; st.perfects[S.subj] = 0; }
+  S.perfectCount = st.perfects[S.subj] || 0;
   S.newBadges = checkBadges();
   cycleCheck();                              // jei tėvai sumažino ribą ir visi jau pasiekė
   S.limitHit = subjLocked(S.subj);           // šis dalykas jau išnaudojo atlygius — minučių neduoda
@@ -1049,6 +1059,7 @@ function vDone() {
     <div class="fb ${S.passed ? 'ok' : ''}" style="color:${S.passed ? '' : '#374151'}">${msg}</div>
     ${S.newCycle ? `<div class="fb ok" style="font-size:30px">Nauja YouTube licencija! 🎉</div><p class="muted">Visi dalykai vėl duoda „YouTube“ laiko.</p>` : ''}
     ${S.lvlUp ? `<div class="fb ok">🚀 Naujas lygis: ${S.lvlUp}! Užduotys bus šiek tiek sunkesnės.</div>` : ''}
+    ${S.perfect && !S.lvlUp && (st.levels[S.subj] || 1) < 3 ? `<div class="fb ok">💯 Be klaidų! Iki naujo lygio: ${S.perfectCount}/${PERFECT_TO_LEVEL}</div>` : ''}
     ${S.lvlDown ? `<p class="muted">Kitą kartą užduotys bus šiek tiek lengvesnės.</p>` : ''}
     ${nb.length ? `<div class="card" style="background:#fef3c7;margin:12px 0 0"><b>Naujas ženklelis!</b>
       <div class="badges" style="justify-content:center;margin-top:8px">${nb.map(badgeHtml).join('')}</div></div>` : ''}
@@ -1233,7 +1244,7 @@ function vParent() {
     <label>Vaiko vardas (kaip kreipiamės, pvz. „Lukrecija“, „Jonai“)</label><input type="text" data-set="name" maxlength="20" value="${esc(s.name || '')}">
     <label>Šuniuko vardas</label><input type="text" data-set="petName" maxlength="20" value="${esc(s.petName || '')}">
     <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-set="petOn" ${s.petOn !== false ? 'checked' : ''} style="width:26px;height:26px">Rodyti šuniuką pradžios ekrane</label>
-    <label>Sunkumo lygis (1–3). Keičiasi pats: 9–10 teisingų → aukštyn, 0–4 → žemyn.</label>
+    <label>Sunkumo lygis (1–3). Keičiasi pats: ${PERFECT_TO_LEVEL} raundai be klaidų (10 iš 10) → aukštyn, 0–4 teisingi → žemyn.</label>
     <div class="row">${['math', 'lt', 'en'].map(k => `<span style="flex:1;min-width:120px">${SUBJECTS[k].ico} ${SUBJECTS[k].name}
       <input type="number" min="1" max="3" data-lvl="${k}" value="${(st.levels || {})[k] || 1}"></span>`).join('')}</div>
     <p class="muted" style="margin-top:12px">Ženklelių: <b>${BADGES.filter(b => st.badges && st.badges[b.id]).length} / ${BADGES.length}</b> · dienų iš eilės: <b>${curStreak()}</b> · raundų iš viso: <b>${st.rounds || 0}</b></p></div>
@@ -1382,6 +1393,7 @@ app.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.lvl) {
     st.levels = Object.assign({}, DEFAULTS.levels, st.levels);
     st.levels[e.target.dataset.lvl] = Math.min(3, Math.max(1, parseInt(e.target.value, 10) || 1));
+    st.perfects = Object.assign({}, DEFAULTS.perfects, st.perfects); st.perfects[e.target.dataset.lvl] = 0;
     save(); toast('Išsaugota'); render(); return;
   }
   const k = e.target.dataset && e.target.dataset.set; if (!k) return;

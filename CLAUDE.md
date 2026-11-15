@@ -16,6 +16,7 @@ Savininkas: Valdas (ne programuotojas). Atsakyk lietuviškai, paprastai, trumpai
 - Būsena: localStorage raktas `vp_v1`; šeimos kodas atskirai `vp_family`.
 - Sinchronizacija: Firestore REST (be SDK), dokumentas `families/{kodas}`, laukas `data` (JSON tekstas). Tėvų dalis (`P_F`: videos, settings, bonusTotal, cheer; `pts`) ir vaiko dalis (`C_F`: stars, balance, earned, log, bonusApplied, rounds, levels, streak, badges, rewards; `cts`) sulyginamos atskirai pagal laiko žymą (naujesnis laimi). Naujus laukus dėk į `DEFAULTS` (ir į `P_F`/`C_F`), kad seni duomenys nesulūžtų.
 - Tėvų +5/+10 min. keliauja kaip skirtumas `bonusTotal − bonusApplied` (nedingsta sinchronizuojant). Prisijungiant prie kodo (`joining`) laimi įrenginys su tikrais duomenimis.
+- Lygiai 1–3 (`levels`): kyla po `PERFECT_TO_LEVEL` (3) raundų be klaidų (10/10) tame lygyje, skaičiuojama sumiškai (`perfects`, vaiko dalis); 0–4 teisingi → žemyn. Pasikeitus lygiui `perfects` nusinulina.
 - YouTube atlygių riba: dalykas per ciklą duoda ne daugiau kaip `settings.perSubject` (1–10, numatyta 3) atlygių; skaitliukai `rewards` (vaiko dalis). Atlygis skaičiuojamas tik kai raundas iš tikro davė minučių. Kai visi dalykai pasiekia ribą — `cycleCheck()` nunulina visus (naujas ciklas). Per naktį ciklas nenusinulina; dienos riba `cap` galioja papildomai.
 - Laikas skaičiuojamas tik kai YouTube grotuvo būsena = 1 (groja).
 - Firebase projektas: `lukrecijos-programele` (Spark, nemokamas). `apiKey` web programoms yra viešas; apsaugą užtikrina `firestore.rules` ir slaptas šeimos kodas.

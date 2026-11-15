@@ -125,6 +125,8 @@ h2{margin:0 0 10px;font-size:22px}
 .badge span{font-size:40px;line-height:1.2}
 .badge.off span{filter:grayscale(1);opacity:.25}
 .badge.on{color:var(--ink)}
+.rw{font-size:15px;font-weight:800;color:#b91c1c}
+.rw.full{color:#374151}
 .lvl{font-size:13px;font-weight:800;color:var(--brand);background:#eef2ff;border-radius:99px;padding:2px 10px}
 .overlay{position:fixed;inset:0;background:#1e1b4bcc;z-index:55;display:flex;align-items:center;justify-content:center;padding:20px}
 .overlay .card{max-width:520px;width:100%;text-align:center;animation:pop .4s}
@@ -188,7 +190,7 @@ h2{margin:0 0 10px;font-size:22px}
    Duomenys saugomi planšetėje (localStorage) ir, jei įvestas šeimos kodas, sinchronizuojami su Firebase Firestore (be paskyrų, pagal slaptą kodą).
    ========================================================= */
 
-const VERSION = '1.6 (2026-11-14)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
+const VERSION = '1.7 (2026-11-15)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
 const app = document.getElementById('app');
 const KEY = 'vp_v1';
 const DEFAULTS = {
@@ -200,6 +202,7 @@ const DEFAULTS = {
   log: [],                          // {d, s, t, ok}
   videos: [],                       // {kind:'video'|'playlist', id, title}
   rounds: 0,                        // užbaigtų raundų skaičius
+  rewards: { math: 0, lt: 0, en: 0 },// šio ciklo „YouTube“ atlygiai pagal dalyką (vaiko dalis)
   levels: { math: 1, lt: 1, en: 1 },// sunkumo lygis 1–3
   streak: { last: '', n: 0 },       // kiek dienų iš eilės
   badges: {},                       // {id: data}
@@ -213,6 +216,7 @@ const DEFAULTS = {
     petName: 'Bobis',
     pin: '1234',
     perRound: 5,                    // minutės už sėkmingą raundą
+    perSubject: 3,                  // kiek „YouTube“ atlygių vienas dalykas duoda per ciklą (1–10)
     minCorrect: 7,                  // kiek teisingų iš 10 reikia
     cap: 20,                        // maks. minučių per dieną
     edukaMin: 5,                    // minutės už patvirtintą EDUKA/Oxford užduotį
@@ -228,7 +232,8 @@ function load() {
       return Object.assign({}, JSON.parse(JSON.stringify(DEFAULTS)), s, {
         settings: Object.assign({}, DEFAULTS.settings, s.settings || {}),
         earned: Object.assign({}, DEFAULTS.earned, s.earned || {}),
-        levels: Object.assign({}, DEFAULTS.levels, s.levels || {})
+        levels: Object.assign({}, DEFAULTS.levels, s.levels || {}),
+        rewards: Object.assign({}, DEFAULTS.rewards, s.rewards || {})
       });
     }
   } catch (e) {}
@@ -243,7 +248,7 @@ const FAM_KEY = 'vp_family';
 let famCode = '';
 try { famCode = localStorage.getItem(FAM_KEY) || ''; } catch (e) {}
 const P_F = ['videos', 'settings', 'bonusTotal', 'cheer'];                                              // tėvų duomenys
-const C_F = ['stars', 'balance', 'earned', 'log', 'bonusApplied', 'rounds', 'levels', 'streak', 'badges']; // vaiko duomenys
+const C_F = ['stars', 'balance', 'earned', 'log', 'bonusApplied', 'rounds', 'levels', 'streak', 'badges', 'rewards']; // vaiko duomenys
 const pickF = (o, F) => { const r = {}; F.forEach(f => r[f] = o[f]); return r; };
 const partP = o => JSON.stringify(pickF(o, P_F));
 const partC = o => JSON.stringify(pickF(o, C_F));
@@ -289,7 +294,7 @@ async function sync() {
       st.settings = Object.assign({}, DEFAULTS.settings, st.settings || {}); st.pts = remote.pts || 0; pulled = true; };
     const takeC = () => { C_F.forEach(f => st[f] = clone(remote[f], DEFAULTS[f]));
       st.earned = Object.assign({}, DEFAULTS.earned, st.earned || {}); st.levels = Object.assign({}, DEFAULTS.levels, st.levels || {});
-      st.cts = remote.cts || 0; pulled = true; };
+      st.rewards = Object.assign({}, DEFAULTS.rewards, st.rewards || {}); st.cts = remote.cts || 0; pulled = true; };
     if (remote && joining) {
       // Prisijungiant prie esamo kodo laimi tas įrenginys, kuriame yra tikri duomenys (ne laiko žyma).
       if ((remote.videos || []).length || !st.videos.length) { takeP(); st.cheerSeen = (st.cheer || {}).id || 0; }
@@ -712,6 +717,19 @@ function checkBadges() {
   for (const b of BADGES) if (!st.badges[b.id] && b.ok()) { st.badges[b.id] = today(); nw.push(b); }
   return nw;
 }
+/* ---------- „YouTube“ atlygių riba kiekvienam dalykui (ciklas) ---------- */
+// Dalykas per ciklą duoda ne daugiau kaip N atlygių. Kai VISI dalykai pasiekia N — naujas ciklas (visi į 0).
+// Ciklas per naktį nenusinulina; dienos riba (cap) galioja papildomai.
+const SUBJ_KEYS = () => Object.keys(SUBJECTS);
+const perSubj = () => Math.min(10, Math.max(1, parseInt(st.settings.perSubject, 10) || DEFAULTS.settings.perSubject));
+const rw = s => (st.rewards || {})[s] || 0;
+const subjLocked = s => rw(s) >= perSubj();
+function zeroRewards() { const r = {}; SUBJ_KEYS().forEach(k => r[k] = 0); return r; }
+function cycleCheck() {
+  if (!SUBJ_KEYS().every(subjLocked)) return false;
+  st.rewards = zeroRewards(); return true;
+}
+const rwTag = s => subjLocked(s) ? '<span class="rw full">🔒 Rinkis kitą dalyką</span>' : `<span class="rw">📺 ${rw(s)}/${perSubj()}</span>`;
 const badgeHtml = b => `<div class="badge ${st.badges && st.badges[b.id] ? 'on' : 'off'}"><span>${b.ico}</span>${b.name}</div>`;
 function showCheer() {
   const c = st.cheer || {};
@@ -909,9 +927,9 @@ function vHome() {
   </div>
   ${petHtml()}
   <div class="grid">
-    <button class="tile math" data-act="start" data-s="math"><span class="ico">🔢</span>Matematika<small>10 užduočių</small>${lv('math')}</button>
-    <button class="tile lt" data-act="start" data-s="lt"><span class="ico">🔤</span>Lietuvių kalba<small>10 užduočių</small>${lv('lt')}</button>
-    <button class="tile en" data-act="start" data-s="en"><span class="ico">🇬🇧</span>English<small>10 tasks</small>${lv('en')}</button>
+    <button class="tile math ${subjLocked('math') ? 'locked' : ''}" data-act="start" data-s="math"><span class="ico">🔢</span>Matematika<small>10 užduočių</small>${lv('math')}${rwTag('math')}</button>
+    <button class="tile lt ${subjLocked('lt') ? 'locked' : ''}" data-act="start" data-s="lt"><span class="ico">🔤</span>Lietuvių kalba<small>10 užduočių</small>${lv('lt')}${rwTag('lt')}</button>
+    <button class="tile en ${subjLocked('en') ? 'locked' : ''}" data-act="start" data-s="en"><span class="ico">🇬🇧</span>English<small>10 tasks</small>${lv('en')}${rwTag('en')}</button>
     <button class="tile ext" data-act="link" data-k="eduka"><span class="ico">📚</span>EDUKA<small>atsidaro naršyklėje</small></button>
     ${ox}
     <button class="tile yt ${ytLocked ? 'locked' : ''}" data-act="yt"><span class="ico">${ytLocked ? '🔒' : '🎬'}</span>YouTube<small>${ytLocked ? 'užsidirbk laiko' : 'liko ' + fmt(st.balance)}</small></button>
@@ -1001,16 +1019,25 @@ function finishRound() {
   if (S.correct >= 9 && lv < 3) { st.levels[S.subj] = lv + 1; S.lvlUp = lv + 1; }
   else if (S.correct <= 4 && lv > 1) { st.levels[S.subj] = lv - 1; S.lvlDown = true; }
   S.newBadges = checkBadges();
-  S.earnedSec = ok ? credit(st.settings.perRound * 60) : 0;
+  cycleCheck();                              // jei tėvai sumažino ribą ir visi jau pasiekė
+  S.limitHit = subjLocked(S.subj);           // šis dalykas jau išnaudojo atlygius — minučių neduoda
+  S.earnedSec = ok && !S.limitHit ? credit(st.settings.perRound * 60) : 0;
+  S.newCycle = false;
+  if (S.earnedSec > 0) {
+    st.rewards = Object.assign(zeroRewards(), st.rewards); st.rewards[S.subj] = rw(S.subj) + 1;
+    S.newCycle = cycleCheck();
+  }
   S.passed = ok; save(); go('done');
   if (ok) pet.celebrate = true;             // grįžus į pradžią šuniukas pasidžiaugs
   if (ok || S.lvlUp || S.newBadges.length) { SND.win(); confetti(ok ? 45 : 25); }
+  if (S.newCycle) { confetti(60); toast('Nauja YouTube licencija! 🎉'); }
   if (st.settings.autoRead) speak(`Teisingai ${S.correct} iš ${S.qs.length}.` + (S.lvlUp ? ' Naujas lygis!' : ''), 'lt-LT');
 }
 function vDone() {
   const n = S.qs.length, stars = '⭐'.repeat(S.correct);
   let msg;
-  if (!S.passed) msg = `Reikia bent ${st.settings.minCorrect} teisingų, kad gautum „YouTube“ laiko. Pabandyk dar kartą! 💪`;
+  if (S.limitHit) msg = 'Šio dalyko YouTube jau išnaudotas. Išspręsk kitą dalyką!';
+  else if (!S.passed) msg = `Reikia bent ${st.settings.minCorrect} teisingų, kad gautum „YouTube“ laiko. Pabandyk dar kartą! 💪`;
   else if (S.earnedSec <= 0) msg = 'Šiandien jau užsidirbai didžiausią leistiną „YouTube“ laiką. Puiku! 🎉';
   else msg = `Gavai +${Math.round(S.earnedSec / 60)} min. „YouTube“ laiko! 🎬`;
   const nb = S.newBadges || [], streak = curStreak();
@@ -1020,6 +1047,7 @@ function vDone() {
     <div class="qprompt">Teisingai: ${S.correct} iš ${n}</div>
     <div class="qvis" style="min-height:0;font-size:34px">${stars}</div>
     <div class="fb ${S.passed ? 'ok' : ''}" style="color:${S.passed ? '' : '#374151'}">${msg}</div>
+    ${S.newCycle ? `<div class="fb ok" style="font-size:30px">Nauja YouTube licencija! 🎉</div><p class="muted">Visi dalykai vėl duoda „YouTube“ laiko.</p>` : ''}
     ${S.lvlUp ? `<div class="fb ok">🚀 Naujas lygis: ${S.lvlUp}! Užduotys bus šiek tiek sunkesnės.</div>` : ''}
     ${S.lvlDown ? `<p class="muted">Kitą kartą užduotys bus šiek tiek lengvesnės.</p>` : ''}
     ${nb.length ? `<div class="card" style="background:#fef3c7;margin:12px 0 0"><b>Naujas ženklelis!</b>
@@ -1215,7 +1243,11 @@ function vParent() {
     <label>Kiek teisingų iš 10 reikia, kad gautų laiko</label><input type="number" min="1" max="10" data-set="minCorrect" value="${s.minCorrect}">
     <label>Daugiausia užsidirbamų minučių per dieną</label><input type="number" min="0" max="240" data-set="cap" value="${s.cap}">
     <label>Minutės už patvirtintą EDUKA / Oxford užduotį</label><input type="number" min="0" max="60" data-set="edukaMin" value="${s.edukaMin}">
-    <p class="hint">Tėvų papildomas laikas (+5, +10) dienos ribos neskaičiuoja.</p></div>
+    <p class="hint">Tėvų papildomas laikas (+5, +10) dienos ribos neskaičiuoja.</p>
+    <label>YouTube atlygių kiekvienam dalykui per ciklą</label><input type="number" min="1" max="10" data-set="perSubject" value="${perSubj()}">
+    <p class="muted">Šis ciklas: ${SUBJ_KEYS().map(k => `${SUBJECTS[k].ico} ${rw(k)}/${perSubj()}`).join(' · ')}</p>
+    <button class="btn small gray" data-act="resetcycle">Nunulinti ciklą</button>
+    <p class="hint">Kai visi dalykai pasiekia ribą, prasideda naujas ciklas. Per naktį ciklas nenusinulina; dienos riba galioja papildomai.</p></div>
 
   <div class="card"><h2>Nuorodos</h2>
     <label>EDUKA nuoroda</label><input type="url" data-set="eduka" value="${esc(s.eduka)}">
@@ -1286,6 +1318,7 @@ const H = {
   pin(d) { pinKey(d.k); },
   bonus(d) { st.bonusTotal = (st.bonusTotal || 0) + (+d.m) * 60; applyBonus(); save(); render(); },
   resetbal() { st.balance = 0; save(); render(); },
+  resetcycle() { st.rewards = zeroRewards(); save(); render(); toast('Ciklas nunulintas'); },
   pfeed() { petDo('eat', 1800); petSnd('chomp'); petBubble('Skanu! 😋'); setTimeout(() => petFx('💖', 3), 1500); },
   pball() { if (pet.ball) return; pet.sleeping = false; pet.carry = false; pet.ball = { x: Math.random(), y: 0.15 + Math.random() * 0.6 }; petSnd('bark'); petBubble('Bėgu! 🏃'); },
   pdance() { petDo('dance', 3000); petFx('🎵', 5); tone([[523, .2], [659, .2], [784, .2], [659, .2], [523, .2], [784, .35], [1047, .45]]); },
@@ -1353,9 +1386,13 @@ app.addEventListener('change', e => {
   }
   const k = e.target.dataset && e.target.dataset.set; if (!k) return;
   let v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-  if (['perRound', 'minCorrect', 'cap', 'edukaMin'].includes(k)) {
+  if (['perRound', 'minCorrect', 'cap', 'edukaMin', 'perSubject'].includes(k)) {
     v = Math.max(0, parseInt(v, 10) || 0);
-    if (k === 'minCorrect') v = Math.min(10, Math.max(1, v));
+    if (k === 'minCorrect' || k === 'perSubject') v = Math.min(10, Math.max(1, v));
+  }
+  if (k === 'perSubject') {
+    st.settings[k] = v; const nc = cycleCheck(); save(); render();
+    toast(nc ? 'Išsaugota. Visi dalykai pasiekė ribą — naujas ciklas.' : 'Išsaugota'); return;
   }
   if (k === 'pin') { if (!/^\d{4}$/.test(v)) { toast('PIN turi būti 4 skaitmenys.'); render(); return; } }
   if (k === 'name') v = String(v).trim();

@@ -1,0 +1,89 @@
+<!doctype html>
+<!-- Logikos testai. Paleisti: python3 -m http.server 8765 → http://localhost:8765/tests/test.html (rezultatas #out). -->
+<!-- Dėmesio: išvalo šios svetainės localStorage (naudoti tik vietiniame serveryje). -->
+<meta charset="utf-8"><title>Testai: logika</title>
+<body style="font-family:system-ui;margin:16px"><h1>Logikos testai</h1><pre id="out">VYKDOMA…</pre>
+<iframe id="f" src="../index.html" style="width:820px;height:700px;border:1px solid #ccc"></iframe>
+<script>
+const R = []; let fails = 0, started = false;
+const ok = (c, m) => { R.push((c ? '✅ ' : '❌ ') + m); if (!c) fails++; };
+const f = document.getElementById('f');
+f.onload = () => { if (started) return; started = true; try { run(); } catch (e) { ok(false, 'KLAIDA ' + e + '\n' + e.stack); } finish(); };
+function finish() { document.getElementById('out').textContent = `Klaidų: ${fails}\n` + R.join('\n'); }
+function run() {
+  const w = f.contentWindow, E = s => w.eval(s);
+  const fresh = (extra = '') => E(`localStorage.clear(); setFam(''); st = JSON.parse(JSON.stringify(DEFAULTS)); st.settings.cap = 240; ${extra}; lastP = partP(st); lastC = partC(st); go('home')`);
+  const round = (subj, correct) => E(`S = { subj: '${subj}', qs: Array(10).fill({}), i: 10, correct: ${correct}, locked: false }; finishRound(); S`);
+  const st = () => E('st');
+
+  // --- užduočių generatoriai (visi dalykai, visi lygiai) ---
+  let bad = 0;
+  fresh();
+  for (const s of ['math', 'lt', 'en']) for (const lv of [1, 2, 3]) {
+    E(`st.levels.${s} = ${lv}`);
+    for (let k = 0; k < 300; k++) for (const q of E(`makeRound('${s}')`)) {
+      if (q.build) { if (q.opts.slice().sort().join() !== q.word.slice().sort().join()) bad++; continue; }
+      if (q.ans < 0 || q.ans >= q.opts.length || new Set(q.opts.map(String)).size !== q.opts.length) bad++;
+    }
+  }
+  ok(bad === 0, 'Užduotys: teisingas atsakymas yra, variantai nesikartoja (visi lygiai)');
+  ok(E("parseYT('youtu.be/dQw4w9WgXcQ')").id === 'dQw4w9WgXcQ' && E("parseYT('Žiūrėk https://youtu.be/9bZkp7q19f0?si=x')").id === '9bZkp7q19f0' && !E("parseYT('https://youtube.com/@kanalas')"), 'YouTube nuorodų atpažinimas');
+
+  // --- YouTube atlygių riba ---
+  fresh();
+  ok(E('perSubj()') === 3 && E("rw('math')") === 0, 'Numatytoji riba 3, skaitliukai 0');
+  for (let i = 0; i < 3; i++) round('math', 10);
+  ok(st().rewards.math === 3 && st().balance === 15 * 60, 'Matematika davė 3 atlygius (15 min.)');
+  const s4 = round('math', 10);
+  ok(s4.limitHit && s4.earnedSec === 0 && st().balance === 15 * 60 && st().rewards.math === 3, '4-as matematikos raundas minučių neduoda');
+  ok(E('vDone()').includes('Šio dalyko YouTube jau išnaudotas. Išspręsk kitą dalyką!'), 'Raundo pabaigoje rodomas „išnaudotas“ pranešimas');
+  E("go('home')");
+  const home = E("app.innerHTML");
+  ok(/tile math locked/.test(home) && home.includes('Rinkis kitą dalyką') && home.includes('📺 0/3'), 'Kortelė užrakinta („Rinkis kitą dalyką“), kitos rodo 📺 0/3');
+  // užrakintą dalyką vis tiek galima spręsti, žvaigždutės skaičiuojamos
+  const stars0 = st().stars;
+  E("startRound('math'); answer(S.qs[0].ans)");
+  ok(E('view') === 'quiz' && st().stars === stars0 + 1, 'Užrakintą dalyką galima spręsti, žvaigždutės skaičiuojamos');
+  E("S = null; go('home')");
+  // nepavykęs raundas neskaičiuojamas
+  const sf = round('lt', 3);
+  ok(!sf.passed && st().rewards.lt === 0, 'Nepavykęs raundas atlygio neskaičiuoja');
+
+  // --- ciklo nunulinimas ---
+  fresh("st.rewards = { math: 3, lt: 3, en: 2 }");
+  const sc = round('en', 10);
+  ok(sc.newCycle && st().rewards.math === 0 && st().rewards.lt === 0 && st().rewards.en === 0, 'Visi pasiekė 3/3 → naujas ciklas (visi 0/3)');
+  ok(sc.earnedSec === 5 * 60, 'Paskutinis ciklo atlygis vis tiek duoda minutes');
+  ok(E('vDone()').includes('Nauja YouTube licencija! 🎉'), 'Rodomas „Nauja YouTube licencija! 🎉“');
+  // per naktį nenusinulina
+  fresh("st.rewards = { math: 2, lt: 1, en: 0 }; st.earned = { date: '2000-01-01', sec: 600 }");
+  E('earnedToday()'); E("go('home')");
+  ok(st().rewards.math === 2 && st().rewards.lt === 1 && st().earned.sec === 0, 'Nauja diena: dienos riba nusinulina, ciklas — ne');
+  // dienos riba galioja papildomai
+  fresh("st.settings.cap = 5");
+  round('math', 10); const sd = round('lt', 10);
+  ok(st().rewards.math === 1 && sd.earnedSec === 0 && st().rewards.lt === 0, 'Dienos riba galioja papildomai (be minučių atlygis neskaičiuojamas)');
+
+  // --- tėvų nustatymai ---
+  fresh("st.rewards = { math: 1, lt: 0, en: 0 }; st.settings.perSubject = 1");
+  ok(E("subjLocked('math')") && !E("subjLocked('lt')"), 'Riba 1: matematika užrakinta, kitos ne');
+  fresh("st.rewards = { math: 2, lt: 2, en: 2 }");
+  E("go('parent')");
+  const inp = E("document.querySelector('[data-set=perSubject]')");
+  ok(!!inp && inp.value === '3', 'Tėvų zonoje yra ribos nustatymas (3)');
+  inp.value = '2'; inp.dispatchEvent(new w.Event('change', { bubbles: true }));
+  ok(st().settings.perSubject === 2 && st().rewards.math === 0, 'Sumažinus ribą iki 2, kai visi turi 2 → naujas ciklas');
+  inp.value = '99'; E("document.querySelector('[data-set=perSubject]')").value = '99';
+  E("document.querySelector('[data-set=perSubject]')").dispatchEvent(new w.Event('change', { bubbles: true }));
+  ok(st().settings.perSubject === 10, 'Riba apribojama iki 10');
+  E("st.rewards = { math: 1, lt: 2, en: 0 }; render()");
+  E("document.querySelector('[data-act=resetcycle]').click()");
+  ok(st().rewards.math === 0 && st().rewards.lt === 0, 'Mygtukas „Nunulinti ciklą“ veikia');
+
+  // --- seni duomenys ---
+  E(`localStorage.setItem('vp_v1', JSON.stringify({ stars: 5, balance: 60, settings: { pin: '1111', cap: 20 } })); st = load()`);
+  ok(st().stars === 5 && st().rewards.math === 0 && E('perSubj()') === 3 && st().settings.pin === '1111', 'Seni duomenys be naujų laukų nesulūžta');
+  ok(E("C_F.includes('rewards') && !P_F.includes('rewards') && partP(st).includes('perSubject')"), 'Skaitliukai vaiko dalyje (cts), riba tėvų dalyje (pts)');
+  E("localStorage.clear()");
+}
+</script>

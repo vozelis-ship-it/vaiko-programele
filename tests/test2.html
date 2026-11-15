@@ -1,0 +1,73 @@
+<!doctype html>
+<!-- Naudotojo veiksmų testai (spaudimai). Paleisti: python3 -m http.server 8765 → http://localhost:8765/tests/test2.html (rezultatas #out). -->
+<meta charset="utf-8"><title>Testai: veiksmai</title>
+<body style="font-family:system-ui;margin:16px"><h1>Veiksmų testai</h1><pre id="out">VYKDOMA…</pre>
+<iframe id="f" src="../index.html" style="width:820px;height:900px;border:1px solid #ccc"></iframe>
+<script>
+const R = []; let fails = 0, started = false;
+const ok = (c, m) => { R.push((c ? '✅ ' : '❌ ') + m); if (!c) fails++; };
+const f = document.getElementById('f'), w = () => f.contentWindow, d = () => f.contentDocument, E = s => w().eval(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const click = sel => d().querySelector(sel).click();
+const ptr = (type, el, x, y) => (type === 'pointerdown' ? el : w()).dispatchEvent(new (w().PointerEvent)(type, { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+f.onload = async () => {
+  if (started) return; started = true;
+  try { await run(); } catch (e) { ok(false, 'KLAIDA ' + e + '\n' + e.stack); }
+  document.getElementById('out').textContent = `Klaidų: ${fails}\n` + R.join('\n');
+};
+async function playRound(subj, correct) {
+  click(`[data-act=start][data-s=${subj}]`); await sleep(30);
+  for (let n = 0; n < 10; n++) {
+    const q = E('S.qs[S.i]');
+    if (q.build) {
+      if (n < correct) for (const ch of q.word) { const b = [...d().querySelectorAll('.opt')]; b[b.findIndex((x, k) => !x.disabled && q.opts[k] === ch)].click(); }
+      else d().querySelectorAll('.opt')[q.opts.findIndex(x => x !== q.word[0])].click();
+    } else d().querySelectorAll('.opt')[n < correct ? q.ans : (q.ans + 1) % q.opts.length].click();
+    if (n < correct) await sleep(1400); else { await sleep(20); click('[data-act=next]'); await sleep(20); }
+  }
+}
+async function run() {
+  E("localStorage.clear(); setFam(''); st = JSON.parse(JSON.stringify(DEFAULTS)); st.settings.cap = 240; st.settings.name = 'Testas'; lastP = partP(st); lastC = partC(st); go('home')");
+  const drive = setInterval(() => w().petLoop(w().performance.now()), 16);   // be ekrano kadrų nepiešiama — varome patys
+  await sleep(100);
+  ok(d().querySelector('h1').textContent.includes('Testas'), 'Pasisveikinimas su vardu');
+  ok(d().querySelector('[data-s=math]').textContent.includes('📺 0/3'), 'Kortelėje rodomas 📺 0/3');
+
+  await playRound('math', 10);
+  ok(d().getElementById('app').textContent.includes('Gavai +5 min.'), 'Sėkmingas raundas: +5 min.');
+  click('[data-act=home]'); await sleep(30);
+  ok(d().querySelector('[data-s=math]').textContent.includes('📺 1/3'), 'Po raundo kortelė rodo 📺 1/3');
+  E("st.rewards.math = 3; go('home')");
+  ok(d().querySelector('[data-s=math]').classList.contains('locked') && d().querySelector('[data-s=math]').textContent.includes('Rinkis kitą dalyką'), 'Pasiekus 3/3 kortelė pilka ir rodo „Rinkis kitą dalyką“');
+  const bal = E('st.balance');
+  await playRound('math', 10);
+  ok(d().getElementById('app').textContent.includes('Šio dalyko YouTube jau išnaudotas') && E('st.balance') === bal, 'Užrakintas dalykas: pranešimas, minučių nepridėta');
+  click('[data-act=home]'); await sleep(30);
+  E("st.rewards = { math: 3, lt: 3, en: 2 }; go('home')");
+  await playRound('en', 10);
+  ok(d().getElementById('app').textContent.includes('Nauja YouTube licencija! 🎉'), 'Visi 3/3 → „Nauja YouTube licencija! 🎉“');
+  click('[data-act=home]'); await sleep(30);
+  ok(['math', 'lt', 'en'].every(s => d().querySelector(`[data-s=${s}]`).textContent.includes('📺 0/3')), 'Naujame cikle visos kortelės 📺 0/3');
+
+  // tėvų zona: PIN, vaizdo įrašo pridėjimas
+  click('[data-act=parent]'); for (const k of '1234') click(`[data-act=pin][data-k="${k}"]`); await sleep(50);
+  ok(!!d().querySelector('[data-set=perSubject]') && !!d().querySelector('[data-act=resetcycle]'), 'Tėvų zonoje yra ribos nustatymas ir „Nunulinti ciklą“');
+  d().getElementById('vurl').value = 'youtu.be/dQw4w9WgXcQ'; click('[data-act=addvideo]'); await sleep(30);
+  ok(E('st.videos.length') === 1, 'Vaizdo įrašas pridėtas');
+  click('[data-act=home]'); await sleep(50);
+
+  // šuniukas
+  const pet = () => d().getElementById('pet'), cls = () => d().getElementById('petAct').className;
+  ok(!!pet(), 'Šuniukas rodomas pradžios ekrane');
+  let r = pet().getBoundingClientRect(); ptr('pointerdown', pet(), r.x + 60, r.y + 50); ptr('pointerup', pet(), r.x + 60, r.y + 50); await sleep(60);
+  ok(/jump|spin|salto|roll|sit|shake|wag|talk|dance/.test(cls()), 'Paspaudus šuniukas daro triuką');
+  await sleep(1800);
+  r = pet().getBoundingClientRect(); ptr('pointerdown', pet(), r.x + 60, r.y + 50); ptr('pointermove', null, r.x + 90, r.y + 70); await sleep(40);
+  ok(cls().includes('held'), 'Šuniuką galima tempti'); ptr('pointerup', null, r.x + 90, r.y + 70); await sleep(900);
+  click('[data-act=pball]'); await sleep(5000);
+  ok(!E('pet.ball'), 'Šuniukas atneša kamuoliuką');
+  click('[data-act=psleep]'); await sleep(60); ok(cls().includes('sleep'), 'Šuniukas užmiega');
+  clearInterval(drive);
+  E("localStorage.clear()");
+}
+</script>

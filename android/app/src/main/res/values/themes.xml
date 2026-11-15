@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:statusBarColor">#4f46e5</item>
+        <item name="android:colorAccent">#4f46e5</item>
+    </style>
+    <style name="BlockTheme" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#4f46e5</item>
+        <item name="android:colorAccent">#4f46e5</item>
+    </style>
+</resources>

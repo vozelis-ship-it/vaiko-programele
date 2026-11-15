@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- Android tilto testai su netikru window.AndroidBridge. Paleisti: python3 -m http.server 8765 → http://localhost:8765/tests/test3.html (#out). -->
+<meta charset="utf-8"><title>Testai: Android tiltas</title>
+<body style="font-family:system-ui;margin:16px"><h1>Android tilto testai</h1><pre id="out">VYKDOMA…</pre>
+<iframe id="f" style="width:820px;height:900px;border:1px solid #ccc"></iframe>
+<script>
+const R = []; let fails = 0;
+const ok = (c, m) => { R.push((c ? '✅ ' : '❌ ') + m); if (!c) fails++; };
+const calls = [];
+const FakeBridge = window.FakeBridge = {
+  used: 0, games: ['com.game.one'], bal: null,
+  getApps() { calls.push('getApps'); return JSON.stringify([
+    { pkg: 'com.game.one', name: 'Žaidimas', icon: '', isNew: false },
+    { pkg: 'com.google.android.youtube', name: 'YouTube', icon: '', isNew: false },
+    { pkg: 'com.new.app', name: 'Nauja programa', icon: '', isNew: true }]); },
+  setGames(j) { calls.push('setGames'); this.games = JSON.parse(j); },
+  getGames() { return JSON.stringify(this.games); },
+  markSeen(p) { calls.push('markSeen:' + p); },
+  setBalance(s) { calls.push('setBalance'); this.bal = s; },
+  takeUsedSeconds() { const u = this.used; this.used = 0; return u; },
+  isGuardOn() { return false; },
+  openGuardSettings() { calls.push('openGuardSettings'); },
+  getAppVersion() { return '1.0.0 (10000)'; }
+};
+(async () => {
+  try {
+    localStorage.clear();
+    localStorage.setItem('vp_v1', JSON.stringify({ balance: 600, settings: { cap: 240 } }));
+    FakeBridge.used = 120;                                    // žaista 2 min. kol programa buvo uždaryta
+    let html = await (await fetch('../index.html')).text();
+    html = html.replace('<head>', '<head><base href="../"><script>window.AndroidBridge = parent.FakeBridge;<\/script>');
+    const f = document.getElementById('f'); f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+    await new Promise(r => setTimeout(r, 600));
+    const w = f.contentWindow, d = f.contentDocument, E = s => w.eval(s);
+    ok(E('st.balance') === 480, 'Startas: takeUsedSeconds (120 s) atimta iš balanso (600 → 480)');
+    ok(E("st.log.some(x => x.s === 'games' && x.sec === 120)"), 'Žaidimų laikas įrašytas į žurnalą');
+    ok(FakeBridge.bal === 480, 'setBalance gavo naują balansą');
+    ok(d.querySelector('.pill.yt').textContent.includes('📺🎮 Laikas: 8 min.'), 'Pagrindiniame ekrane „📺🎮 Laikas: 8 min.“');
+    E("st.balance = 300; save()");
+    ok(FakeBridge.bal === 300, 'Po save() iškart kviečiamas setBalance');
+    FakeBridge.used = 30; E('window.__vpAndroidResume()');
+    ok(E('st.balance') === 270 && FakeBridge.bal === 270, 'Grįžus į programą (resume) atimtas žaidimų laikas');
+    E("go('parent')");
+    const card = [...d.querySelectorAll('.card h2')].find(h => h.textContent.includes('Programėlės planšetėje'));
+    ok(!!card, 'Tėvų zonoje yra kortelė „Programėlės planšetėje“');
+    ok(d.body.textContent.includes('Sargas išjungtas ⚠️') && !!d.querySelector('[data-act=abguard]'), 'Rodoma „Sargas išjungtas ⚠️“ ir mygtukas „Įjungti“');
+    d.querySelector('[data-act=abguard]').click(); ok(calls.includes('openGuardSettings'), '„Įjungti“ atidaro sargo nustatymus');
+    const names = [...d.querySelectorAll('.app .appname')].map(x => x.textContent);
+    ok(names[0].includes('Nauja programa') && names[0].includes('NAUJA'), 'Nauja programėlė sąrašo viršuje su žyme NAUJA');
+    ok(d.querySelector('[data-game="com.game.one"]').checked && !d.querySelector('[data-game="com.google.android.youtube"]').checked, 'Pažymėti žaidimai atitinka getGames');
+    const yt = d.querySelector('[data-game="com.google.android.youtube"]'); yt.checked = true; yt.dispatchEvent(new w.Event('change', { bubbles: true }));
+    ok(FakeBridge.games.includes('com.google.android.youtube') && FakeBridge.games.includes('com.game.one'), 'Jungiklis kviečia setGames su visu sąrašu');
+    ok(d.body.textContent.includes('1.0.0 (10000)'), 'Rodoma programėlės versija');
+    ok(!E("statsHtml()").includes('games') && E("statsHtml()").includes('🎮 Žaidimai per 7 d.'), 'Statistikoje žaidimai neskaičiuojami kaip užduotys, rodoma atskira eilutė');
+    localStorage.clear();
+  } catch (e) { ok(false, 'KLAIDA ' + e + '\n' + e.stack); }
+  document.getElementById('out').textContent = `Klaidų: ${fails}\n` + R.join('\n');
+})();
+</script>

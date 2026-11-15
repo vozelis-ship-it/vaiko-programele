@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mokausi</string>
+    <string name="guard_description">Mokausi sargas skaičiuoja, kiek laiko vaikas praleidžia tėvų pažymėtose programėlėse (žaidimuose), ir jas užblokuoja, kai baigiasi užduotimis užsidirbtas laikas. Sargas mato tik, kuri programėlė atidaryta, ir jokių duomenų niekur nesiunčia.</string>
+</resources>

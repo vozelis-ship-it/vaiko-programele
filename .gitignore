@@ -1,0 +1,19 @@
+# Sistema
+.DS_Store
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
+android/captures/
+
+# Pasirašymo raktai ir slaptažodžiai — NIEKADA į repo
+*.jks
+*.keystore
+*.p12
+ANDROID_KEYSTORE_BASE64.txt
+SLAPTAZODZIAI.txt

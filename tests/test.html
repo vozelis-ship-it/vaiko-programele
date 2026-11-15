@@ -27,6 +27,22 @@ function run() {
     }
   }
   ok(bad === 0, 'Užduotys: teisingas atsakymas yra, variantai nesikartoja (visi lygiai)');
+
+  // --- naujos užduotys pagal pratybas: ar atsakymai teisingi ---
+  const many = (expr, n = 400) => Array.from({ length: n }, () => E(expr));
+  const NUMLT = E('NUMLT');
+  ok(many('MATH.numname(1)').every(q => q.ans >= 0 && (typeof q.val === 'string' ? q.vis === String(NUMLT.indexOf(q.val)) : q.vis.includes('>' + NUMLT[q.val] + '<'))), 'Skaičių pavadinimai atitinka skaičius (10–19)');
+  ok(many('MATH.neighbor(1)').every(q => { const t = [...q.vis.matchAll(/>(\d+)<\/text>/g)].map(m => +m[1]);
+    const pos = q.vis.indexOf('>?<') < q.vis.indexOf('>' + t[0] + '<') ? 0 : q.vis.lastIndexOf('>?<') > q.vis.lastIndexOf('>' + t[1] + '<') ? 2 : 1;
+    return q.val === (pos === 0 ? t[0] - 1 : pos === 2 ? t[1] + 1 : t[0] + 1); }), 'Praleistas skaičius skaičių tiesėje teisingas');
+  ok(many('MATH.ruler(3)').every(q => q.val >= 2 && q.val <= 9 && q.optLabels[q.ans] === q.val + ' cm'), 'Atkarpos ilgis: atsakymas „N cm“');
+  ok(many('MATH.rulercmp(2)').every(q => ['Raudona', 'Mėlyna', 'Vienodos'][q.ans] === q.val), 'Atkarpų palyginimas');
+  ok(many('MATH.story(1)').every(q => { const [a, b] = q.prompt.match(/\d+/g).map(Number);
+    return q.val === (q.prompt.includes('liko') ? a - b : a + b) && q.vis.includes('emo sm') && (q.prompt.includes('liko') ? (q.vis.match(/class="xo"/g) || []).length === b : true); }), 'Tekstiniai uždaviniai: „iš viso“ +, „liko“ −, schema su perbrauktais');
+  ok(many('LT.nosine()').every(q => /[ąęįų]$/.test(q.val) && q.opts.length === 3 && q.opts[q.ans] === E(`ACC[${JSON.stringify(E('LT_WORDS').find(o => E('ACC')[o.w] === q.val).w)}]`)), 'Ką? — 3 variantai, teisingas su nosine gale');
+  ok(E("ACC['šuo']") === 'šunį' && E("ACC['katė']") === 'katę' && E("ACC['namas']") === 'namą', 'Ką? formos (šunį, katę, namą)');
+  ok(many('LT.caps()').every(q => { const t = q.opts[q.ans]; return /^Čia [A-ZŠŽ]/.test(t) && /augina [A-ZŠŽĖ]/.test(t) && q.opts.filter(o => /^Čia [A-ZŠŽ].*augina [A-ZŠŽĖ]/.test(o)).length === 1; }), 'Vardai didžiąja raide: tik vienas teisingas sakinys');
+  ok(many('LT.ijword()').every(q => q.opts[q.ans] === 'į'), 'Žodis „į“ su nosine');
   ok(E("parseYT('youtu.be/dQw4w9WgXcQ')").id === 'dQw4w9WgXcQ' && E("parseYT('Žiūrėk https://youtu.be/9bZkp7q19f0?si=x')").id === '9bZkp7q19f0' && !E("parseYT('https://youtube.com/@kanalas')"), 'YouTube nuorodų atpažinimas');
 
   // --- YouTube atlygių riba ---
@@ -103,6 +119,7 @@ function run() {
   // --- seni duomenys ---
   E(`localStorage.setItem('vp_v1', JSON.stringify({ stars: 5, balance: 60, settings: { pin: '1111', cap: 20 } })); st = load()`);
   ok(st().stars === 5 && st().rewards.math === 0 && st().perfects.math === 0 && E('perSubj()') === 3 && st().settings.pin === '1111', 'Seni duomenys be naujų laukų nesulūžta');
+  ok(E('AB') === null && !E('androidCardHtml()') && E("go('parent'), app.innerHTML").indexOf('Programėlės planšetėje') < 0, 'Naršyklėje (be AndroidBridge) Android kortelės nėra');
   ok(E("C_F.includes('rewards') && !P_F.includes('rewards') && partP(st).includes('perSubject')"), 'Skaitliukai vaiko dalyje (cts), riba tėvų dalyje (pts)');
   E("localStorage.clear()");
 }

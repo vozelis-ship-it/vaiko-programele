@@ -42,6 +42,7 @@ Savininkas: Valdas (ne programuotojas). Atsakyk lietuviškai, paprastai, trumpai
 ## Užduotys pagal pratybas
 - Pratybų nuotraukos: `/Users/v.ozelis/Desktop/Claude darbai/TEMPLLATES/Vaiko programele/<data>/` — NEdėti į šį aplanką (Netlify publikuoja viską, būtų vieša).
 - 2026-11-15 pagal pratybas (skaičiai iki 20, tekstiniai uždaviniai, atkarpos cm, „į“, vardai, Ką? nosinė) pridėta: `numname`, `neighbor`, `ruler`, `rulercmp`, `story` su schema (1 lygis), `nosine` (+ `ACC` formos), `caps`, `ijword`. Užduotis kurti savas, ne kopijuoti pratybų.
+- 2026-11-16 anglų vadovėlis (Starter: greetings, numbers 1–10, colours; 1 skyrius „What can we see at school?“: classroom objects, stationery, What's this? It's a…, I've got / I haven't got, feelings) — pridėta: `school` (+ `SCHOOL`, `SCHOOL_SVG` piešinėliai), `whatsthis`, `ivegot`, `feelings`, `greet`; `listen` dabar daugiausia su klasės daiktais. Britų anglų (rubber, colour). Kitiems skyriams (2: family, 3: toys, 4: pets…) — pridėti naujus tipus ir perdėlioti `SUBJECTS.en.bags`.
 
 ## Dar neužbaigta
 - Tikrinti planšetėje: lietuviškas TTS balsas, YouTube įterpimas, Family Link „Always allowed“ PWA atveju (jei neveiks — reikės natyvaus APK).

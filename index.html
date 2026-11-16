@@ -122,6 +122,9 @@ h2{margin:0 0 10px;font-size:22px}
 .qvis .emo.sm{font-size:38px;letter-spacing:2px}
 .qvis .gap{display:inline-block;width:26px}
 .xo{position:relative;display:inline-block}
+.markwrap{position:relative;display:inline-block}
+.mark{position:absolute;right:-30px;top:-10px;font-size:56px;font-weight:900}
+.mark.yes{color:#16a34a}.mark.no{color:#dc2626}
 .xo::after{content:'';position:absolute;left:-3px;right:-3px;top:50%;border-top:4px solid #dc2626;transform:rotate(-35deg)}
 .opt:disabled{opacity:.3}
 .slots{font-size:46px;font-weight:900;letter-spacing:6px;display:block;margin-top:6px}
@@ -202,7 +205,7 @@ h2{margin:0 0 10px;font-size:22px}
    Duomenys saugomi planšetėje (localStorage) ir, jei įvestas šeimos kodas, sinchronizuojami su Firebase Firestore (be paskyrų, pagal slaptą kodą).
    ========================================================= */
 
-const VERSION = '2.0 (2026-11-15)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
+const VERSION = '2.1 (2026-11-16)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
 const app = document.getElementById('app');
 const KEY = 'vp_v1';
 const DEFAULTS = {
@@ -710,6 +713,22 @@ const ANIMALS = [['cat','🐱'],['dog','🐶'],['fish','🐟'],['bird','🐦'],[
 const THINGS = [['apple','🍎'],['book','📖'],['ball','⚽'],['car','🚗'],['house','🏠'],['tree','🌳'],['sun','☀️'],['star','⭐'],
   ['banana','🍌'],['cake','🎂'],['milk','🥛'],['bread','🍞'],['bus','🚌'],['moon','🌙'],['flower','🌸'],['balloon','🎈']];
 
+// Anglų vadovėlio 1 skyrius „What can we see at school?“: klasės daiktai ir mokyklinės priemonės.
+// Kur nėra tinkamo emodžio — paprastas SVG piešinėlis.
+const SCHOOL_SVG = {
+  board: '<rect x="6" y="14" width="88" height="58" rx="4" fill="#8b5a2b"/><rect x="11" y="19" width="78" height="48" fill="#1f3a2e"/><text x="50" y="50" font-size="17" font-weight="700" fill="#fff" text-anchor="middle" font-family="sans-serif">A B C</text><rect x="22" y="72" width="56" height="5" fill="#8b5a2b"/>',
+  desk: '<rect x="8" y="32" width="84" height="12" rx="2" fill="#f97316"/><rect x="14" y="44" width="7" height="42" fill="#9a3412"/><rect x="79" y="44" width="7" height="42" fill="#9a3412"/><rect x="56" y="44" width="23" height="18" fill="#fdba74" stroke="#9a3412" stroke-width="2"/><circle cx="67" cy="53" r="2" fill="#7c2d12"/>',
+  cupboard: '<rect x="20" y="8" width="60" height="84" rx="4" fill="#fb923c" stroke="#9a3412" stroke-width="3"/><line x1="50" y1="8" x2="50" y2="92" stroke="#9a3412" stroke-width="3"/><circle cx="44" cy="50" r="3.5" fill="#7c2d12"/><circle cx="56" cy="50" r="3.5" fill="#7c2d12"/>',
+  rubber: '<g transform="rotate(-15 50 50)"><rect x="18" y="35" width="64" height="32" rx="8" fill="#f9a8d4" stroke="#db2777" stroke-width="3"/><rect x="18" y="35" width="24" height="32" rx="8" fill="#60a5fa" stroke="#2563eb" stroke-width="3"/></g>',
+  'pencil case': '<rect x="8" y="34" width="84" height="36" rx="18" fill="#2563eb" stroke="#1e3a8a" stroke-width="2"/><line x1="22" y1="42" x2="78" y2="42" stroke="#cbd5e1" stroke-width="3" stroke-dasharray="3 2"/><rect x="76" y="36" width="9" height="12" rx="2" fill="#cbd5e1"/>',
+  'pencil sharpener': '<rect x="22" y="28" width="56" height="46" rx="7" fill="#7c3aed" stroke="#4c1d95" stroke-width="2"/><circle cx="50" cy="53" r="13" fill="#1e1b4b"/><circle cx="50" cy="53" r="5" fill="#a78bfa"/><rect x="30" y="32" width="40" height="7" rx="2" fill="#c4b5fd"/>'
+};
+const SCHOOL = [['window', '🪟'], ['poster', '🖼️'], ['board', ''], ['door', '🚪'], ['cupboard', ''], ['desk', ''], ['book', '📖'], ['chair', '🪑'],
+  ['bag', '🎒'], ['bin', '🗑️'], ['pencil case', ''], ['rubber', ''], ['ruler', '📏'], ['pen', '🖊️'], ['pencil sharpener', ''], ['pencil', '✏️']];
+const schoolPic = (w, e) => e ? `<span class="emo">${e}</span>` : `<svg viewBox="0 0 100 100" width="170" height="170">${SCHOOL_SVG[w]}</svg>`;
+const FEELINGS = [['happy', '😀'], ['sad', '😢'], ['angry', '😠'], ['scared', '😨'], ['tired', '😴']];
+const KIDS = ['Ema', 'Tom', 'Mia', 'Ben', 'Lily', 'Sam'];
+
 const EN = {
   color() {
     const [w, hex] = pick(COLORS);
@@ -742,10 +761,43 @@ const EN = {
       say: { t: 'What is it?', l: 'en-GB' }, after: { t: w, l: 'en-GB' } };
   },
   listen() {                                  // išgirsti žodį ir pasirinkti paveikslėlį (skaityti nereikia)
-    const all = ANIMALS.concat(THINGS), [w, e] = pick(all);
+    const all = Math.random() < 0.7 ? SCHOOL.filter(x => x[1]) : ANIMALS, [w, e] = pick(all);   // daugiausia — klasės daiktai
     const c = choices(e, shuffle(all.filter(x => x[0] !== w)).slice(0, 3).map(x => x[1]));
     return { type: 'listen', prompt: 'Listen and choose! (Klausyk ir pasirink)', vis: '<span class="emo">👂</span>', ...c, emoOpts: true, val: w,
       say: { t: w, l: 'en-GB' }, after: { t: w, l: 'en-GB' } };
+  },
+  school() {                                  // klasės daiktai ir priemonės: paveikslėlis → žodis
+    const [w, e] = pick(SCHOOL);
+    const c = choices(w, shuffle(SCHOOL.map(x => x[0]).filter(x => x !== w)).slice(0, 3));
+    return { type: 'school', prompt: 'What is it? (Kas tai?)', vis: schoolPic(w, e), ...c, optCls: 'txt', cols: 2, val: w,
+      say: { t: 'What is it?', l: 'en-GB' }, after: { t: w, l: 'en-GB' } };
+  },
+  whatsthis() {                               // What's this? — It's a …
+    const [w, e] = pick(SCHOOL), ans = `It's a ${w}.`;
+    const c = choices(ans, shuffle(SCHOOL.map(x => x[0]).filter(x => x !== w)).slice(0, 2).map(x => `It's a ${x}.`));
+    return { type: 'whatsthis', prompt: "What's this? (Kas tai?)", vis: schoolPic(w, e), ...c, optCls: 'txt', cols: 1, val: ans,
+      say: { t: "What's this?", l: 'en-GB' }, after: { t: ans, l: 'en-GB' } };
+  },
+  ivegot() {                                  // I've got a … / I haven't got a … (✓ arba ✗)
+    const [w, e] = pick(SCHOOL.slice(10).concat([['book', '📖'], ['bag', '🎒']])), have = Math.random() < 0.5;
+    const opts = shuffle([`I've got a ${w}.`, `I haven't got a ${w}.`]), right = have ? `I've got a ${w}.` : `I haven't got a ${w}.`;
+    return { type: 'ivegot', prompt: 'Look and choose! (✓ — turiu, ✗ — neturiu)',
+      vis: `<span class="markwrap">${schoolPic(w, e)}<span class="mark ${have ? 'yes' : 'no'}">${have ? '✓' : '✗'}</span></span>`,
+      opts, ans: opts.indexOf(right), optCls: 'txt', cols: 1, val: right,
+      say: { t: 'Look and choose!', l: 'en-GB' }, after: { t: right, l: 'en-GB' } };
+  },
+  feelings() {                                // jausmai
+    const [w, e] = pick(FEELINGS);
+    const c = choices(w, shuffle(FEELINGS.map(x => x[0]).filter(x => x !== w)).slice(0, 3));
+    return { type: 'feelings', prompt: 'How do you feel? (Kaip jautiesi?)', vis: `<span class="emo" style="font-size:90px">${e}</span>`, ...c, optCls: 'txt', cols: 2, val: w,
+      say: { t: 'How do you feel?', l: 'en-GB' }, after: { t: `I'm ${w}.`, l: 'en-GB' } };
+  },
+  greet() {                                   // pasisveikinimas: klausimas → tinkamas atsakymas
+    const name = `My name's ${pick(KIDS)}.`, fine = "I'm fine, thank you.", age = `I'm ${pick(['six', 'seven'])}.`;
+    const [q, ans] = pick([["What's your name?", name], ['How are you?', fine], ['How old are you?', age]]);
+    const c = choices(ans, [name, fine, age].filter(x => x !== ans));
+    return { type: 'greet', prompt: 'Choose the answer! (Pasirink atsakymą)', vis: `<span class="word" style="font-size:36px;letter-spacing:0">💬 ${q}</span>`,
+      ...c, optCls: 'txt', cols: 1, val: ans, say: { t: q, l: 'en-GB' }, after: { t: ans, l: 'en-GB' } };
   }
 };
 
@@ -760,9 +812,9 @@ const SUBJECTS = {
     ['first','last','mletter','syll','nosine','nosine','caps','ijword','build','vc'],
     ['last','mletter','syll','nosine','nosine','caps','ijword','build','build','vc'] ] },
   en:   { name: 'English', ico: '🇬🇧', lang: 'en', gen: EN, bags: [
-    ['color','color','listen','listen','listen','animal','animal','object','num2word','word2num'],
-    ['color','listen','listen','animal','animal','object','object','num2word','num2word','word2num'],
-    ['color','listen','listen','animal','object','object','num2word','num2word','word2num','word2num'] ] }
+    ['color','word2num','school','school','listen','listen','feelings','greet','whatsthis','num2word'],
+    ['color','num2word','school','school','listen','feelings','greet','whatsthis','ivegot','ivegot'],
+    ['school','school','listen','feelings','greet','whatsthis','whatsthis','ivegot','ivegot','animal'] ] }
 };
 const LEVEL_NAME = ['', '1 lygis', '2 lygis', '3 lygis'];
 const PERFECT_TO_LEVEL = 3;                 // kiek raundų be klaidų reikia naujam lygiui
@@ -770,7 +822,7 @@ const TYPE_LABEL = {
   add:'Sudėtis', sub:'Atimtis', cmp:'Skaičių palyginimas', count:'Skaičiavimas', missing:'Trūkstamas skaičius',
   seq:'Skaičių eilutė', story:'Uždaviniai žodžiais', first:'Pirma raidė', last:'Paskutinė raidė',
   mletter:'Trūkstama raidė', syll:'Skiemenys', vc:'Balsės ir priebalsės', color:'Spalvos',
-  num2word:'Skaičiai (žodis)', word2num:'Skaičiai (skaitmuo)', animal:'Gyvūnai', object:'Daiktai',
+  num2word:'Skaičiai (žodis)', word2num:'Skaičiai (skaitmuo)', animal:'Gyvūnai', object:'Daiktai', school:'Klasės daiktai (EN)', whatsthis:'What’s this? It’s a…', ivegot:'I’ve got / I haven’t got', feelings:'Jausmai (EN)', greet:'Pasisveikinimas (EN)',
   clock:'Laikrodis', coins:'Pinigai', shape:'Figūros', pic:'Žodis pagal paveikslėlį', build:'Žodžio sudėjimas', listen:'Klausymas (EN)',
   numname:'Skaičių pavadinimai', neighbor:'Praleisti skaičiai', ruler:'Atkarpos ilgis (cm)', rulercmp:'Atkarpų palyginimas',
   nosine:'Ką? (nosinė gale)', caps:'Vardai didžiąja raide', ijword:'Žodis „į“'

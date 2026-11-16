@@ -43,6 +43,16 @@ function run() {
   ok(E("ACC['šuo']") === 'šunį' && E("ACC['katė']") === 'katę' && E("ACC['namas']") === 'namą', 'Ką? formos (šunį, katę, namą)');
   ok(many('LT.caps()').every(q => { const t = q.opts[q.ans]; return /^Čia [A-ZŠŽ]/.test(t) && /augina [A-ZŠŽĖ]/.test(t) && q.opts.filter(o => /^Čia [A-ZŠŽ].*augina [A-ZŠŽĖ]/.test(o)).length === 1; }), 'Vardai didžiąja raide: tik vienas teisingas sakinys');
   ok(many('LT.ijword()').every(q => q.opts[q.ans] === 'į'), 'Žodis „į“ su nosine');
+  // --- anglų kalba pagal vadovėlį (Starter + 1 skyrius) ---
+  const SCH = E('SCHOOL').map(x => x[0]);
+  ok(many('EN.school()').every(q => SCH.includes(q.opts[q.ans]) && (q.vis.includes('<svg') || q.vis.includes('emo'))), 'Klasės daiktai: paveikslėlis → žodis (16 žodžių, piešinėliai be emodžių)');
+  ok(SCH.every(w => E(`schoolPic(${JSON.stringify(w)}, (SCHOOL.find(x => x[0] === ${JSON.stringify(w)}) || [])[1])`).length > 20), 'Kiekvienas klasės daiktas turi paveikslėlį');
+  ok(many('EN.whatsthis()').every(q => q.opts.length === 3 && q.opts.every(o => /^It's a .+\.$/.test(o)) && q.opts[q.ans] === q.val), "What's this? → It's a …");
+  ok(many('EN.ivegot()').every(q => q.opts[q.ans].startsWith(q.vis.includes('mark yes') ? "I've got" : "I haven't got")), "I've got (✓) / I haven't got (✗)");
+  ok(many('EN.feelings()').every(q => E('FEELINGS').find(x => x[0] === q.opts[q.ans])[1] === q.vis.match(/>([^<]+)<\/span>/)[1]), 'Jausmai: veidukas atitinka žodį');
+  ok(many('EN.greet()').every(q => { const t = q.say.t, a = q.opts[q.ans];
+    return t.includes('name') ? a.startsWith("My name's") : t.includes('How are') ? a.startsWith("I'm fine") : /^I'm (six|seven)\.$/.test(a); }), 'Pasisveikinimas: klausimas ↔ atsakymas');
+  ok(E("SUBJECTS.en.bags").flat().filter(t => ['school','whatsthis','ivegot','feelings','greet','listen'].includes(t)).length >= 21, 'Anglų rinkiniuose daugiausia dabartinio skyriaus užduočių');
   ok(E("parseYT('youtu.be/dQw4w9WgXcQ')").id === 'dQw4w9WgXcQ' && E("parseYT('Žiūrėk https://youtu.be/9bZkp7q19f0?si=x')").id === '9bZkp7q19f0' && !E("parseYT('https://youtube.com/@kanalas')"), 'YouTube nuorodų atpažinimas');
 
   // --- YouTube atlygių riba ---

@@ -110,6 +110,38 @@ function run() {
   ok(st().rewards.math === 3, 'Tą pačią dieną antrą kartą neatrakinama');
   ok(E("C_F.includes('unlockDay') && partP(st).includes('cycleBonus')"), 'unlockDay vaiko dalyje, prizas tėvų dalyje (sinchronizuojasi)');
 
+  // --- 🔊 prie anglų atsakymų ---
+  fresh(); E("startRound('en')");
+  let tries = 0; while (E('S.qs[S.i].emoOpts') && tries++ < 20) E("S.i++; render()");
+  const nOpt = E('S.qs[S.i].opts.length');
+  ok(E("app.querySelectorAll('.ospk').length") === nOpt, 'Anglų užduotyje prie kiekvieno atsakymo yra 🔊');
+  E("window.__sp = []; window.__oldSpeak = speak; speak = (t, l) => __sp.push([t, l])");
+  E("document.querySelector('[data-act=sayopt][data-i=\"0\"]').click()");
+  const lab0 = E('String((S.qs[S.i].optLabels || S.qs[S.i].opts)[0])');
+  ok(E('__sp').some(([t, l]) => t === lab0 && l === 'en-GB') && E('S.locked') === false, '🔊 perskaito atsakymą angliškai ir jo nepasirenka');
+  E("speak = __oldSpeak");
+  E("S = null; startRound('lt')"); ok(E("app.querySelectorAll('.ospk').length") === 0, 'Lietuvių užduotyse atsakymų 🔊 nėra');
+  E("S = null; go('home')");
+
+  // --- Bobis — augintinis ---
+  fresh();
+  ok(E('bob().bones') === 3 && E('bob().food') === 80, 'Bobis pradeda su 3 kaulais ir 80 % sotumo');
+  E("startRound('math'); answer(S.qs[0].ans)");
+  ok(E('bob().bones') === 4 && E("document.getElementById('fb').textContent").includes('+1 🦴'), 'Už teisingą atsakymą +1 🦴');
+  E("S = null; go('home')");
+  ok(E("app.innerHTML").includes('Sotumas') && E("app.innerHTML").includes('🦴 4'), 'Pradžios ekrane rodomos Bobio juostos ir kaulai');
+  E("H.pfeed()");
+  ok(E('bob().bones') === 3 && E('bob().food') >= 99 && E('bob().xp') === 3, 'Pamaitinus: −1 🦴, sotumas ↑, rūpesčio taškai +3');
+  E("st.bobis.bones = 0; st.bobis.food = 20; H.pfeed()");
+  ok(E('bob().food') === 20, 'Be kaulų pamaitinti negalima');
+  ok(E('bobNeed()').includes('Išspręsk užduotį'), 'Alkanas be kaulų — ragina spręsti užduotis');
+  fresh("st.bobis = { bones: 1, food: 80, joy: 80, energy: 80, xp: 0, t: Date.now() - 10 * 3600000 }");
+  ok(Math.round(E('bob().food')) === 40 && Math.round(E('bob().joy')) === 50 && Math.round(E('bob().energy')) === 60, 'Po 10 val. juostos sumažėja (sotumas 80→40)');
+  const cts0 = st().cts; E("go('home'); render()");
+  ok(st().cts === cts0, 'Piešiant ekraną Bobio duomenys neįrašomi (nesugadina sinchronizacijos)');
+  ok(E("bobLevel(0).name") === 'Mažylis' && E("bobLevel(40).name") === 'Jaunas šuo' && E("bobLevel(200).acc") === '👑', 'Bobis auga pagal rūpesčio taškus (Mažylis → Superšuo 👑)');
+  ok(E("C_F.includes('bobis')"), 'Bobio duomenys sinchronizuojasi (vaiko dalis)');
+
   // --- tėvų nustatymai ---
   fresh("st.rewards = { math: 1, lt: 0, en: 0 }; st.settings.perSubject = 1");
   ok(E("subjLocked('math')") && !E("subjLocked('lt')"), 'Riba 1: matematika užrakinta, kitos ne');

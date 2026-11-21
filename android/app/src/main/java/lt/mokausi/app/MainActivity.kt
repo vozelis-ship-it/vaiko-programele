@@ -108,7 +108,12 @@ class MainActivity : Activity() {
 
     private fun load() { showOffline(false); web.loadUrl(SITE) }
 
+    /** Mokymosi puslapiai (EDUKA, Oxford…) — programėlės viduje; YouTube ir kitos pramogos — išorėje (ten galioja ribojimai). */
     private fun openExternal(u: Uri) {
+        if (EduWebActivity.isWeb(u) && !EduWebActivity.isBlocked(u)) {
+            startActivity(Intent(this, EduWebActivity::class.java).putExtra(EduWebActivity.EXTRA_URL, u.toString()))
+            return
+        }
         try { startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) {}
     }
 

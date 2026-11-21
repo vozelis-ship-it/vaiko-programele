@@ -29,6 +29,9 @@ Toje pačioje kortelėje prie kiekvienos programėlės yra jungiklis **„Riboti
 - Naujai įdiegtos programėlės sąrašo viršuje pažymėtos **NAUJA** — nepamiršk jų peržiūrėti.
 - Laikas bendras: tas pats balansas ir YouTube „Mokausi“ viduje, ir žaidimams. Dienos riba (pvz. 20 min.) galioja viskam kartu.
 
+### EDUKA ir Oxford
+EDUKA ir Oxford (anglų) puslapiai atsidaro **pačioje „Mokausi“ programėlėje** (viršuje mygtukas „← Į Mokausi“), ne Chrome — todėl Chrome ribojimai jiems negalioja. Prisijungimas išsaugomas. YouTube, TikTok ir kitos pramogos ten neatsidaro.
+
 ## e) Family Link nustatymai
 1. **Mokausi** → **Visada leidžiama** (kad bendras limitas jos neužrakintų — vaikas turi galėti spręsti užduotis).
 2. **Išjunk bendrą dienos limitą** — laiką dabar skaičiuoja „Mokausi“.

@@ -27,7 +27,7 @@ async function playRound(subj, correct) {
   }
 }
 async function run() {
-  E("localStorage.clear(); setFam(''); st = JSON.parse(JSON.stringify(DEFAULTS)); st.settings.cap = 240; st.settings.name = 'Testas'; lastP = partP(st); lastC = partC(st); go('home')");
+  E("localStorage.clear(); setFam(''); st = JSON.parse(JSON.stringify(DEFAULTS)); st.settings.cap = 240; st.settings.name = 'Testas'; st.unlockDay = today(); lastP = partP(st); lastC = partC(st); go('home')");
   const drive = setInterval(() => w().petLoop(w().performance.now()), 16);   // be ekrano kadrų nepiešiama — varome patys
   await sleep(100);
   ok(d().querySelector('h1').textContent.includes('Testas'), 'Pasisveikinimas su vardu');

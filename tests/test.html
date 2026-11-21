@@ -12,7 +12,7 @@ f.onload = () => { if (started) return; started = true; try { run(); } catch (e)
 function finish() { document.getElementById('out').textContent = `Klaidų: ${fails}\n` + R.join('\n'); }
 function run() {
   const w = f.contentWindow, E = s => w.eval(s);
-  const fresh = (extra = '') => E(`localStorage.clear(); setFam(''); st = JSON.parse(JSON.stringify(DEFAULTS)); st.settings.cap = 240; ${extra}; lastP = partP(st); lastC = partC(st); go('home')`);
+  const fresh = (extra = '') => E(`localStorage.clear(); setFam(''); st = JSON.parse(JSON.stringify(DEFAULTS)); st.settings.cap = 240; st.unlockDay = today(); ${extra}; lastP = partP(st); lastC = partC(st); go('home')`);
   const round = (subj, correct) => E(`S = { subj: '${subj}', qs: Array(10).fill({}), i: 10, correct: ${correct}, locked: false }; finishRound(); S`);
   const st = () => E('st');
 
@@ -89,6 +89,26 @@ function run() {
   fresh("st.settings.cap = 5");
   round('math', 10); const sd = round('lt', 10);
   ok(st().rewards.math === 1 && sd.earnedSec === 0 && st().rewards.lt === 0, 'Dienos riba galioja papildomai (be minučių atlygis neskaičiuojamas)');
+
+  // --- motyvacija: tikslo juosta, prizas už ciklą, kasdienis atrakinimas ---
+  fresh("st.rewards = { math: 3, lt: 3, en: 1 }");
+  const gh = E('goalHtml()');
+  ok(gh.includes('Dar 2 raundai → Nauja licencija + 10 min. prizas!') && gh.includes('English: 2') && !gh.includes('Matematika:'), 'Tikslo juosta: „Dar 2 raundai → Nauja licencija + 10 min. prizas!“, liko tik English');
+  ok(E("go('home'), app.innerHTML").includes('card goal'), 'Tikslo juosta rodoma pradžios ekrane');
+  ok(E("plural(1,['raundas','raundai','raundų'])") === 'raundas' && E("plural(5,['raundas','raundai','raundų'])") === 'raundai' && E("plural(12,['raundas','raundai','raundų'])") === 'raundų', 'Lietuviškos daugiskaitos formos (raundas/raundai/raundų)');
+  fresh("st.rewards = { math: 3, lt: 3, en: 2 }");
+  const bal0 = st().balance, sp = round('en', 10);
+  ok(sp.newCycle && sp.cyclePrize === 600 && st().balance === bal0 + 300 + 600, 'Užbaigus ciklą: +5 min. už raundą ir +10 min. prizas');
+  ok(!!st().badges.cycle && E('vDone()').includes('Prizas: +10 min.'), 'Ženklelis „Nauja licencija“ ir pranešimas apie prizą');
+  fresh("st.rewards = { math: 3, lt: 3, en: 2 }; st.settings.cycleBonus = 0");
+  const bal1 = st().balance, sz = round('en', 10);
+  ok(sz.newCycle && sz.cyclePrize === 0 && st().balance === bal1 + 300, 'Prizas 0 — pridedamos tik raundo minutės');
+  fresh("st.rewards = { math: 3, lt: 3, en: 1 }; st.unlockDay = '2000-01-01'");
+  E("go('home')");
+  ok(st().rewards.math === 2 && st().rewards.lt === 2 && st().rewards.en === 1 && st().unlockDay === E('today()'), 'Nauja diena: užrakinti dalykai gauna po 1 raundą (3→2), kiti nekinta');
+  E("st.rewards.math = 3; go('home')");
+  ok(st().rewards.math === 3, 'Tą pačią dieną antrą kartą neatrakinama');
+  ok(E("C_F.includes('unlockDay') && partP(st).includes('cycleBonus')"), 'unlockDay vaiko dalyje, prizas tėvų dalyje (sinchronizuojasi)');
 
   // --- tėvų nustatymai ---
   fresh("st.rewards = { math: 1, lt: 0, en: 0 }; st.settings.perSubject = 1");

@@ -40,6 +40,7 @@ class MainActivity : Activity() {
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
     private var pendingMic: PermissionRequest? = null
+    private lateinit var bridge: AndroidBridge
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,7 +61,8 @@ class MainActivity : Activity() {
             javaScriptCanOpenWindowsAutomatically = true
             cacheMode = WebSettings.LOAD_DEFAULT
         }
-        web.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
+        bridge = AndroidBridge(this)
+        web.addJavascriptInterface(bridge, "AndroidBridge")
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                 val u = req.url
@@ -171,7 +173,7 @@ class MainActivity : Activity() {
         web.evaluateJavascript("window.__vpAndroidResume && window.__vpAndroidResume()", null)
     }
 
-    override fun onPause() { web.onPause(); super.onPause() }
+    override fun onPause() { if (::bridge.isInitialized) bridge.stopSpeak(); web.onPause(); super.onPause() }
 
     override fun onSaveInstanceState(outState: Bundle) { super.onSaveInstanceState(outState); web.saveState(outState) }
 
@@ -186,5 +188,5 @@ class MainActivity : Activity() {
         }
     }
 
-    override fun onDestroy() { web.destroy(); super.onDestroy() }
+    override fun onDestroy() { if (::bridge.isInitialized) bridge.shutdown(); web.destroy(); super.onDestroy() }
 }

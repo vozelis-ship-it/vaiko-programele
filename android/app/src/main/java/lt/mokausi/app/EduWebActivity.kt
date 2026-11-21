@@ -80,6 +80,8 @@ class EduWebActivity : Activity() {
             loadWithOverviewMode = true; useWideViewPort = true
             builtInZoomControls = true; displayZoomControls = false
             setSupportMultipleWindows(true); javaScriptCanOpenWindowsAutomatically = true
+            // Kai kurios svetainės neleidžia prisijungti „programėlės naršyklėje“ — prisistatome kaip įprastas Chrome
+            userAgentString = userAgentString.replace("; wv)", ")").replace(" Version/4.0", "")
         }
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean = handle(req.url)

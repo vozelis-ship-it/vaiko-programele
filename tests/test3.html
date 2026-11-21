@@ -20,7 +20,12 @@ const FakeBridge = window.FakeBridge = {
   takeUsedSeconds() { const u = this.used; this.used = 0; return u; },
   isGuardOn() { return false; },
   openGuardSettings() { calls.push('openGuardSettings'); },
-  getAppVersion() { return '1.0.0 (10000)'; }
+  getAppVersion() { return '1.0.0 (10000)'; },
+  spoken: [], ttsLang: { 'lt-LT': 'ok', 'en-GB': 'ok' },
+  speak(t, l, p) { this.spoken.push([t, l]); return this.ttsLang[l] || 'missing'; },
+  stopSpeak() { calls.push('stopSpeak'); },
+  ttsStatus(l) { return this.ttsLang[l] || 'missing'; },
+  opened: [], openLearning(u) { this.opened.push(u); }
 };
 (async () => {
   try {
@@ -52,6 +57,18 @@ const FakeBridge = window.FakeBridge = {
     ok(FakeBridge.games.includes('com.google.android.youtube') && FakeBridge.games.includes('com.game.one'), 'Jungiklis kviečia setGames su visu sąrašu');
     ok(d.body.textContent.includes('1.0.0 (10000)'), 'Rodoma programėlės versija');
     ok(!E("statsHtml()").includes('games') && E("statsHtml()").includes('🎮 Žaidimai per 7 d.'), 'Statistikoje žaidimai neskaičiuojami kaip užduotys, rodoma atskira eilutė');
+    // --- balsas (WebView neturi speechSynthesis) ---
+    E("startRound('math'); go('quiz')"); FakeBridge.spoken = [];
+    d.querySelector('[data-act=say]').click();
+    const q0 = E('S.qs[S.i]');
+    ok(FakeBridge.spoken.some(([t, l]) => t === q0.say.t && l === 'lt-LT'), 'Mygtukas 🔊 skaito per AndroidBridge.speak (lietuviškai)');
+    E("render()"); ok(calls.includes('stopSpeak'), 'Pereinant ekranus balsas sustabdomas (stopSpeak)');
+    ok(E("hasVoice('lt')") === true, 'Tėvų zonoje balso būsena imama iš Android (ttsStatus)');
+    FakeBridge.ttsLang['lt-LT'] = 'missing'; E("speechHintShown = false"); d.querySelector('[data-act=say]').click();
+    ok((d.querySelector('.toast') || {}).textContent?.includes('nėra lietuviško balso'), 'Jei nėra lietuviško balso — pranešimas su instrukcija');
+    E("S = null; go('home')");
+    d.querySelector('[data-act=link][data-k=eduka]').click();
+    ok(FakeBridge.opened[0] === E('st.settings.eduka'), 'EDUKA atidaroma per AndroidBridge.openLearning (programėlės viduje)');
     localStorage.clear();
   } catch (e) { ok(false, 'KLAIDA ' + e + '\n' + e.stack); }
   document.getElementById('out').textContent = `Klaidų: ${fails}\n` + R.join('\n');

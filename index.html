@@ -206,7 +206,7 @@ h2{margin:0 0 10px;font-size:22px}
    Duomenys saugomi planšetėje (localStorage) ir, jei įvestas šeimos kodas, sinchronizuojami su Firebase Firestore (be paskyrų, pagal slaptą kodą).
    ========================================================= */
 
-const VERSION = '2.2 (2026-11-21)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
+const VERSION = '2.3 (2026-11-21)';   // keisti po kiekvieno pakeitimo — rodoma programos apačioje
 const app = document.getElementById('app');
 const KEY = 'vp_v1';
 const DEFAULTS = {
@@ -428,16 +428,30 @@ function confetti(n) {
 
 /* ---------- balsas ---------- */
 function voices() { try { return speechSynthesis.getVoices() || []; } catch (e) { return []; } }
-function hasVoice(lang) { return voices().some(v => v.lang && v.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())); }
+function hasVoice(lang) {
+  if (AB && typeof AB.ttsStatus === 'function') return abCall('ttsStatus', lang === 'lt' ? 'lt-LT' : 'en-GB') === 'ok';
+  return voices().some(v => v.lang && v.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase()));
+}
+// Android programėlės WebView neturi speechSynthesis — ten skaito Android balsas per AndroidBridge.speak().
+let speechHintShown = false;
+function speechHint(msg) { if (speechHintShown) return; speechHintShown = true; toast(msg); }
 function speak(text, lang, pitch) {
   try {
-    if (!text || !('speechSynthesis' in window)) return;
+    if (!text) return;
+    if (AB && typeof AB.speak === 'function') {
+      const r = abCall('speak', String(text), lang, pitch || 1);
+      if (r === 'missing') speechHint(lang.startsWith('lt')
+        ? 'Planšetėje nėra lietuviško balso. Tėvams: Nustatymai → Kalba → Teksto vertimas į kalbą → Google → įdiegti lietuvių.'
+        : 'Planšetėje nėra anglų balso. Tėvams: Nustatymai → Kalba → Teksto vertimas į kalbą → įdiegti anglų.');
+      return;
+    }
+    if (!('speechSynthesis' in window)) { if (AB) speechHint('Kad veiktų garsas 🔊, atnaujink „Mokausi“ programėlę.'); return; }
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text); u.lang = lang; u.rate = 0.85; if (pitch) u.pitch = pitch;
     speechSynthesis.speak(u);
   } catch (e) {}
 }
-function stopSpeech() { try { speechSynthesis.cancel(); } catch (e) {} }
+function stopSpeech() { if (AB && typeof AB.stopSpeak === 'function') { abCall('stopSpeak'); return; } try { speechSynthesis.cancel(); } catch (e) {} }
 try { speechSynthesis.onvoiceschanged = () => {}; speechSynthesis.getVoices(); } catch (e) {}
 
 /* =========================================================
@@ -1545,6 +1559,7 @@ const H = {
   say() { const q = S && S.qs[S.i]; if (q && q.say) speak(q.say.t, q.say.l); },
   link(d) {
     const u = st.settings[d.k]; if (!u) return;
+    if (AB && typeof AB.openLearning === 'function') { abCall('openLearning', u); return; }   // programėlėje — viduje, be Chrome ribojimų
     window.open(u, '_blank', 'noopener');
   },
   extdone() {

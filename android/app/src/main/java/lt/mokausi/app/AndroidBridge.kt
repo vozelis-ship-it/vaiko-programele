@@ -5,16 +5,73 @@ import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.net.Uri
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 
 /** window.AndroidBridge — kviečiamas iš svetainės (index.html). */
 class AndroidBridge(private val activity: Activity) {
     private val ctx = activity.applicationContext
+
+    // ---------- Balsas: WebView neturi speechSynthesis, todėl skaitome Android TextToSpeech ----------
+    @Volatile private var tts: TextToSpeech? = null
+    @Volatile private var ttsReady = false
+    @Volatile private var pending: Triple<String, String, Float>? = null
+
+    init { ensureTts() }
+
+    private fun ensureTts() {
+        if (tts != null) return
+        tts = TextToSpeech(ctx) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+            pending?.let { pending = null; if (ttsReady) doSpeak(it.first, it.second, it.third) }
+        }
+    }
+
+    private fun localeFor(t: TextToSpeech, lang: String): Locale? {
+        val want = Locale.forLanguageTag(lang)
+        if (t.isLanguageAvailable(want) >= TextToSpeech.LANG_AVAILABLE) return want
+        if (lang.startsWith("en")) listOf(Locale.UK, Locale.US, Locale.ENGLISH).firstOrNull { t.isLanguageAvailable(it) >= TextToSpeech.LANG_AVAILABLE }?.let { return it }
+        return null
+    }
+
+    private fun doSpeak(text: String, lang: String, pitch: Float): String {
+        val t = tts ?: return "error"
+        val loc = localeFor(t, lang) ?: return "missing"
+        t.language = loc
+        t.setPitch(if (pitch > 0f) pitch else 1f)
+        t.setSpeechRate(0.9f)
+        t.speak(text, TextToSpeech.QUEUE_FLUSH, null, "mokausi")
+        return "ok"
+    }
+
+    /** Perskaito tekstą. Grąžina "ok", "missing" (nėra tos kalbos balso), "init" (dar ruošiamasi — perskaitys, kai bus pasiruošęs). */
+    @JavascriptInterface
+    fun speak(text: String, lang: String, pitch: Float): String {
+        ensureTts()
+        if (!ttsReady) { pending = Triple(text, lang, pitch); return "init" }
+        return doSpeak(text, lang, pitch)
+    }
+
+    @JavascriptInterface
+    fun stopSpeak() { pending = null; try { tts?.stop() } catch (e: Exception) {} }
+
+    /** "ok" — kalbos balsas yra; "missing" — nėra; "init" — dar tikrinama. */
+    @JavascriptInterface
+    fun ttsStatus(lang: String): String {
+        ensureTts()
+        val t = tts ?: return "missing"
+        if (!ttsReady) return "init"
+        return if (localeFor(t, lang) != null) "ok" else "missing"
+    }
+
+    fun shutdown() { try { tts?.shutdown() } catch (e: Exception) {}; tts = null; ttsReady = false }
 
     /** Visos programėlės su paleidimo ikona (be „Mokausi“ ir Nustatymų): [{pkg, name, icon, isNew}] */
     @JavascriptInterface
@@ -77,6 +134,19 @@ class AndroidBridge(private val activity: Activity) {
     fun openGuardSettings() {
         activity.runOnUiThread {
             try { activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (e: Exception) {}
+        }
+    }
+
+    /** Mokymosi puslapis (EDUKA, Oxford…) — atidaromas programėlės viduje; pramogos — išorėje. */
+    @JavascriptInterface
+    fun openLearning(url: String) {
+        activity.runOnUiThread {
+            val u = Uri.parse(url)
+            try {
+                if (EduWebActivity.isWeb(u) && !EduWebActivity.isBlocked(u))
+                    activity.startActivity(Intent(activity, EduWebActivity::class.java).putExtra(EduWebActivity.EXTRA_URL, url))
+                else activity.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) {}
         }
     }
 
